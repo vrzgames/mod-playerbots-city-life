@@ -1,0 +1,147 @@
+###################################################################################################
+# City Life
+###################################################################################################
+
+[worldserver]
+
+# Master switch.
+CityLife.Enable = 1
+
+# Verbose population and movement logs.
+CityLife.Debug = 0
+
+# Wait for random playerbots to log in before reserving city residents.
+CityLife.StartupDelaySeconds = 90
+
+# Population/behaviour manager interval. Lower values react faster but cost more CPU.
+CityLife.TickSeconds = 10
+
+###################################################################################################
+# Bot selection and safety
+###################################################################################################
+
+# Read the random-bot account prefix and login delay from mod-playerbots.
+CityLife.Bots.UsePlayerbotConfig = 1
+
+# "auto" uses AiPlayerbot.RandomBotAccountPrefix.
+CityLife.Bots.AccountPrefix = "auto"
+
+# Optional account-id range. 0/0 disables range filtering.
+CityLife.Bots.AccountMin = 0
+CityLife.Bots.AccountMax = 0
+
+CityLife.Bots.QueryLimit = 500
+
+CityLife.Bots.SkipGrouped = 1
+
+# Keep disabled for normal random-playerbot installations. BotActiveAlone may otherwise reject most bots.
+CityLife.Bots.RespectPlayerbotActivity = 0
+
+# Return released residents to the position from which City Life borrowed them.
+CityLife.Bots.ReturnWhenReleased = 1
+
+###################################################################################################
+# Population controller
+###################################################################################################
+
+# Global safety cap after per-hub settings and time multipliers are applied.
+# Higher-priority hubs from city_life_hub are filled first when this limit is reached.
+CityLife.Population.MaxTotal = 300
+
+# Gradual arrivals/departures prevent visible mass teleports and reduce update spikes.
+CityLife.Population.MaxChangesPerTick = 3
+
+###################################################################################################
+# Time-of-day scaling (worldserver machine local time)
+###################################################################################################
+
+CityLife.Time.Enable = 1
+
+# Morning 06:00-11:59, day 12:00-17:59, evening 18:00-23:59, night 00:00-05:59.
+# 100 means the full configured hub population.
+CityLife.Time.MorningMultiplierPct = 60
+CityLife.Time.DayMultiplierPct = 80
+CityLife.Time.EveningMultiplierPct = 100
+CityLife.Time.NightMultiplierPct = 25
+
+###################################################################################################
+# Visual behaviour
+###################################################################################################
+
+# Move residents between the hub's AH/bank/mail/flight/square spots occasionally.
+CityLife.Behaviour.Relocate = 1
+CityLife.Behaviour.RelocateMinSeconds = 180
+CityLife.Behaviour.RelocateMaxSeconds = 600
+
+# Return an idle resident to its assigned spot if another AI moved it farther than this.
+# Combat is never interrupted by the leash.
+CityLife.Behaviour.LeashRadius = 35
+
+CityLife.Behaviour.Emotes = 1
+CityLife.Behaviour.EmoteChancePct = 35
+CityLife.Behaviour.EmoteMinSeconds = 120
+CityLife.Behaviour.EmoteMaxSeconds = 360
+
+# Give AH and bank spots in the listed hubs more residents than other hotspots.
+# 250 means 2.5 times their normal database weight.
+CityLife.Behaviour.ServiceSpotWeightMultiplierPct = 250
+
+# Percentage of residents initially assigned to those service spots that remain stationary.
+# They may still emote and defend themselves if attacked.
+CityLife.Behaviour.StaticServiceChancePct = 80
+CityLife.Behaviour.StaticServiceHubs = "Stormwind,Orgrimmar"
+CityLife.Behaviour.StaticServiceCategories = "auction,bank"
+
+# City bots stay defensive if attacked but do not grind, travel or wander away on their own.
+CityLife.Strategies.NonCombat = "+stay,-follow,-passive,-grind,-rpg,-travel,-duel,-pvp"
+
+###################################################################################################
+# Seed hub populations
+###################################################################################################
+
+# Every database hub also supports:
+#   CityLife.Hub.<HubName>.Enable
+#   CityLife.Hub.<HubName>.Population
+# Custom database hubs use their database default when no config key exists.
+
+CityLife.Hub.Stormwind.Enable = 1
+CityLife.Hub.Stormwind.Population = 25
+
+CityLife.Hub.Orgrimmar.Enable = 1
+CityLife.Hub.Orgrimmar.Population = 25
+
+CityLife.Hub.Ironforge.Enable = 1
+CityLife.Hub.Ironforge.Population = 18
+
+CityLife.Hub.Undercity.Enable = 1
+CityLife.Hub.Undercity.Population = 18
+
+CityLife.Hub.Darnassus.Enable = 1
+CityLife.Hub.Darnassus.Population = 10
+
+CityLife.Hub.ThunderBluff.Enable = 1
+CityLife.Hub.ThunderBluff.Population = 10
+
+CityLife.Hub.Exodar.Enable = 1
+CityLife.Hub.Exodar.Population = 5
+
+CityLife.Hub.Silvermoon.Enable = 1
+CityLife.Hub.Silvermoon.Population = 8
+
+CityLife.Hub.Shattrath.Enable = 1
+CityLife.Hub.Shattrath.Population = 20
+
+CityLife.Hub.Dalaran.Enable = 1
+CityLife.Hub.Dalaran.Population = 25
+
+CityLife.Hub.Gadgetzan.Enable = 1
+CityLife.Hub.Gadgetzan.Population = 8
+
+CityLife.Hub.Goldshire.Enable = 1
+CityLife.Hub.Goldshire.Population = 8
+
+CityLife.Hub.HonorHold.Enable = 1
+CityLife.Hub.HonorHold.Population = 6
+
+CityLife.Hub.Thrallmar.Enable = 1
+CityLife.Hub.Thrallmar.Population = 6
