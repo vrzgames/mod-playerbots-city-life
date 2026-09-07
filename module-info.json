@@ -1,0 +1,10 @@
+{
+  "name": "mod-playerbots-city-life",
+  "displayName": "City Life",
+  "description": "Populates cities, towns and social hubs with configurable AzerothCore Playerbots.",
+  "author": "iCore",
+  "license": "GPL-2.0-or-later",
+  "target_core": "mod-playerbots/azerothcore-wotlk Playerbot branch",
+  "target_module": "mod-playerbots master"
+}
+
