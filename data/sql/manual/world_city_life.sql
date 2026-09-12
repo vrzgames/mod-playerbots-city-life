@@ -49,6 +49,8 @@ VALUES
 ('Silvermoon',1,1,1,80,530,8,130),
 ('Shattrath',1,2,58,80,530,20,200),
 ('Dalaran',1,2,68,80,571,25,210),
+('WintergraspAlliance',1,0,70,80,571,40,230),
+('WintergraspHorde',1,1,70,80,571,40,230),
 ('Gadgetzan',1,2,35,80,1,8,110),
 ('Goldshire',1,0,1,30,0,8,100),
 ('HonorHold',1,0,58,80,530,6,100),
@@ -63,7 +65,8 @@ DELETE `spot` FROM `city_life_spot` AS `spot`
 INNER JOIN `city_life_hub` AS `hub` ON `hub`.`id`=`spot`.`hub_id`
 WHERE `hub`.`name` IN
 ('Stormwind','Orgrimmar','Ironforge','Undercity','Darnassus','ThunderBluff','Exodar','Silvermoon',
- 'Shattrath','Dalaran','Gadgetzan','Goldshire','HonorHold','Thrallmar');
+ 'Shattrath','Dalaran','WintergraspAlliance','WintergraspHorde','Gadgetzan','Goldshire','HonorHold',
+ 'Thrallmar');
 
 -- Coordinates are based on AzerothCore 3.3.5 game_tele and service NPC/gameobject positions.
 -- Use .citylife spot add in game to tune a point for a different navmesh or custom world database.
@@ -133,6 +136,10 @@ INNER JOIN
   UNION ALL SELECT 'Dalaran','HordeBank','bank',5981.66,599.832,651.223,2.75762,6,110
   UNION ALL SELECT 'Dalaran','Mailbox','mail',5797.91,558.436,650.719,4.36332,5,120
   UNION ALL SELECT 'Dalaran','FlightMaster','flight',5813.37,453.403,658.834,4.45059,6,80
+
+  -- Faction-separated Wintergrasp starting graveyards from BattlefieldWG.
+  UNION ALL SELECT 'WintergraspAlliance','AllianceStart','square',5140.79,2179.12,390.95,1.97222,24,100
+  UNION ALL SELECT 'WintergraspHorde','HordeStart','square',5032.454,3711.382,372.468,3.971623,24,100
 
   UNION ALL SELECT 'Gadgetzan','MainSquare','square',-7177.15,-3785.34,8.36981,6.10237,8,110
   UNION ALL SELECT 'Gadgetzan','AuctionHouse','auction',-7239.1,-3803.89,0.813843,0.017453,5,145
