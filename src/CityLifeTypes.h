@@ -47,6 +47,8 @@ namespace CityLife
         uint32 DefaultPopulation = 0;
         uint32 ConfiguredPopulation = 0;
         uint32 Priority = 100;
+        bool UseTimeScaling = true;
+        uint32 ResidenceSeconds = 0;
         std::vector<Spot> Spots;
     };
 
@@ -78,6 +80,7 @@ namespace CityLife
         uint32 NextMoveAt = 0;
         uint32 NextEmoteAt = 0;
         uint32 NextReservationRefreshAt = 0;
+        uint32 ReleaseAt = 0;
         bool Stationary = false;
     };
 }

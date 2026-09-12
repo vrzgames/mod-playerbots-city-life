@@ -276,11 +276,15 @@ namespace CityLife
                 hub.MapId = fields[6].Get<uint32>();
                 hub.DefaultPopulation = fields[7].Get<uint32>();
                 hub.Priority = fields[8].Get<uint32>();
+                std::string configPrefix = "CityLife.Hub." + hub.Name;
                 hub.ConfiguredPopulation = sConfigMgr->GetOption<uint32>(
-                    "CityLife.Hub." + hub.Name + ".Population", hub.DefaultPopulation, false);
+                    configPrefix + ".Population", hub.DefaultPopulation, false);
                 bool configEnabled = sConfigMgr->GetOption<bool>(
-                    "CityLife.Hub." + hub.Name + ".Enable", true, false);
+                    configPrefix + ".Enable", true, false);
                 hub.Enabled = hub.Enabled && configEnabled;
+                hub.UseTimeScaling = sConfigMgr->GetOption<bool>(configPrefix + ".TimeScaling", true, false);
+                hub.ResidenceSeconds = sConfigMgr->GetOption<uint32>(
+                    configPrefix + ".ResidenceSeconds", 0, false);
                 hubs.push_back(hub);
             } while (hubResult->NextRow());
         }
@@ -547,6 +551,8 @@ namespace CityLife
     {
         if (!hub.Enabled || hub.Spots.empty())
             return 0;
+        if (!hub.UseTimeScaling)
+            return hub.ConfiguredPopulation;
         return static_cast<uint32>(std::lround(
             static_cast<double>(hub.ConfiguredPopulation) * CurrentTimeMultiplier() / 100.0));
     }
@@ -595,11 +601,13 @@ namespace CityLife
         resident.NextMoveAt = now + urand(_relocateMinSeconds, _relocateMaxSeconds);
         resident.NextEmoteAt = now + urand(_emoteMinSeconds, _emoteMaxSeconds);
         resident.NextReservationRefreshAt = now + ReservationRefreshSeconds;
+        resident.ReleaseAt = hub.ResidenceSeconds == 0 ? 0 : now + hub.ResidenceSeconds;
 
         ApplyCityStrategies(player);
         SetStayPosition(player, resident);
         if (sRandomPlayerbotMgr.IsRandomBot(player))
-            sRandomPlayerbotMgr.ScheduleTeleport(bot.GuidLow, ReservationSeconds);
+            sRandomPlayerbotMgr.ScheduleTeleport(bot.GuidLow,
+                std::max(ReservationSeconds, hub.ResidenceSeconds + MINUTE));
         MoveBot(player, hub.MapId, resident.TargetX, resident.TargetY, resident.TargetZ, resident.TargetO, true);
         _residents.push_back(resident);
 
@@ -635,14 +643,17 @@ namespace CityLife
 
     void Manager::RemoveUnavailableResidents()
     {
+        uint32 now = GameTimeSeconds();
         auto resident = _residents.begin();
         while (resident != _residents.end())
         {
             Player* player = FindPlayer(resident->Bot.GuidLow);
             Hub* hub = FindHub(resident->HubId);
-            if (!hub || !IsResidentUsable(player))
+            bool residenceExpired = resident->ReleaseAt != 0 && resident->ReleaseAt <= now && player &&
+                !player->IsInCombat() && !player->IsBeingTeleported();
+            if (!hub || !IsResidentUsable(player) || residenceExpired)
             {
-                ReleaseResident(*resident, false);
+                ReleaseResident(*resident, residenceExpired && _returnBots);
                 resident = _residents.erase(resident);
             }
             else
@@ -754,7 +765,8 @@ namespace CityLife
 
             if (resident.NextReservationRefreshAt <= now && sRandomPlayerbotMgr.IsRandomBot(player))
             {
-                sRandomPlayerbotMgr.ScheduleTeleport(resident.Bot.GuidLow, ReservationSeconds);
+                sRandomPlayerbotMgr.ScheduleTeleport(resident.Bot.GuidLow,
+                    std::max(ReservationSeconds, hub->ResidenceSeconds + MINUTE));
                 resident.NextReservationRefreshAt = now + ReservationRefreshSeconds;
             }
 
