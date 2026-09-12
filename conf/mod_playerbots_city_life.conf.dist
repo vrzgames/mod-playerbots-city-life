@@ -102,6 +102,8 @@ CityLife.Strategies.NonCombat = "+stay,-follow,-passive,-grind,-rpg,-travel,-due
 # Every database hub also supports:
 #   CityLife.Hub.<HubName>.Enable
 #   CityLife.Hub.<HubName>.Population
+#   CityLife.Hub.<HubName>.TimeScaling
+#   CityLife.Hub.<HubName>.ResidenceSeconds (0 keeps the same residents indefinitely)
 # Custom database hubs use their database default when no config key exists.
 
 CityLife.Hub.Stormwind.Enable = 1
@@ -133,6 +135,18 @@ CityLife.Hub.Shattrath.Population = 20
 
 CityLife.Hub.Dalaran.Enable = 1
 CityLife.Hub.Dalaran.Population = 25
+
+# Keep 40 bots from each faction at their separate Wintergrasp starting camps. They ignore the
+# time-of-day population multiplier and rotate after three hours.
+CityLife.Hub.WintergraspAlliance.Enable = 1
+CityLife.Hub.WintergraspAlliance.Population = 40
+CityLife.Hub.WintergraspAlliance.TimeScaling = 0
+CityLife.Hub.WintergraspAlliance.ResidenceSeconds = 10800
+
+CityLife.Hub.WintergraspHorde.Enable = 1
+CityLife.Hub.WintergraspHorde.Population = 40
+CityLife.Hub.WintergraspHorde.TimeScaling = 0
+CityLife.Hub.WintergraspHorde.ResidenceSeconds = 10800
 
 CityLife.Hub.Gadgetzan.Enable = 1
 CityLife.Hub.Gadgetzan.Population = 8
