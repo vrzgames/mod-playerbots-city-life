@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.0 - 2026-09-12
+
+- Added separate Alliance and Horde Wintergrasp hubs with 40 bots per faction.
+- Added per-hub time-scaling control so Wintergrasp keeps its full population all day.
+- Added configurable per-hub resident rotation, with a three-hour Wintergrasp duration.
+
 ## 0.1.0 - 2026-09-07
 
 - Initial City Life implementation.

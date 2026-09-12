@@ -17,13 +17,14 @@ auction house economy.
 - Faction and level filtering for every hub.
 - Global population safety cap with priority-based allocation.
 - Runtime GM tools for adding hubs and recording exact hotspot coordinates in game.
-- Bundled AzerothCore 3.3.5 seed data for fourteen popular locations.
+- Bundled AzerothCore 3.3.5 seed data for sixteen popular locations.
 
 Bundled hubs:
 
 - Stormwind, Ironforge, Darnassus and Exodar
 - Orgrimmar, Undercity, Thunder Bluff and Silvermoon
 - Shattrath and Dalaran
+- Alliance and Horde Wintergrasp starting camps
 - Gadgetzan and Goldshire
 - Honor Hold and Thrallmar
 
@@ -37,7 +38,8 @@ City Life borrows already-online random bots. It does not create characters and 
 the number of random bots logged in by `mod-playerbots`. Ensure the Playerbots population is large
 enough to cover normal world activity plus the requested City Life population.
 
-Wintergrasp residents are protected and never borrowed for City Life.
+Bots already present in Wintergrasp are protected and never borrowed for other City Life hubs.
+The bundled faction-specific Wintergrasp hubs maintain their own reserved populations.
 
 ## Installation
 
@@ -67,11 +69,18 @@ Every database hub, including a custom one, automatically supports these keys:
 ```ini
 CityLife.Hub.<HubName>.Enable = 1
 CityLife.Hub.<HubName>.Population = 20
+CityLife.Hub.<HubName>.TimeScaling = 1
+CityLife.Hub.<HubName>.ResidenceSeconds = 0
 ```
 
 If a custom hub has no population key, `default_population` from `city_life_hub` is used. The
 configured number is multiplied by the current time-of-day percentage. With a population of 40
 and a nighttime multiplier of 25, the nighttime target is 10 residents.
+
+`TimeScaling = 0` keeps the configured population constant all day. `ResidenceSeconds` rotates a
+resident after the configured time; `0` keeps the same resident until it becomes unavailable or
+the target population decreases. The bundled Wintergrasp hubs use 40 bots per faction, ignore
+time scaling and rotate residents every three hours.
 
 The worldserver machine's local time is used:
 
