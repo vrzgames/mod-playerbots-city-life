@@ -944,15 +944,10 @@ CityLife.Custom.Legendary.Dalaran.Population = 3
 # Existing identities/classes remain unchanged. Empty quotes stop new Legendary identities.
 CityLife.Custom.Legendary.Classes = "Warrior,Rogue,Paladin"
 
-# Raw creature display ID, not a mount item or spell. 21974 = Swift Spectral Tiger.
-# Fixed fallback when random selection is disabled/empty; 0 disables all Legendary mount visuals.
+# Raw creature display ID, not a mount item or spell. 21974 = Swift Spectral Tiger; 0 disables it.
 CityLife.Custom.Legendary.MountDisplayId = 21974
-# Choose a stable mount per character from this list; restarts keep the same selection.
-# 21974 = Swift Spectral Tiger; 15676 = Black Qiraji Battle Tank. No mount is permanently learned.
-CityLife.Custom.Legendary.Mount.Randomize = 1
-CityLife.Custom.Legendary.Mount.DisplayIds = "21974,15676"
 
-# Full Phase 4 BiS profiles bundled from mod-npc-talent-template, including the real BiS weapons.
+# Full Phase 4 BiS profiles bundled from mod-npc-talent-template, with iconic weapon overrides.
 # The template NPC module does not need to be installed. 0 uses the earlier Tier 10 outfits.
 # Enchants/gems affect generated temporary items only; borrowed original items remain intact.
 CityLife.Custom.Legendary.TemplateGear.Enable = 1
@@ -962,18 +957,7 @@ CityLife.Custom.Legendary.TemplateGear.ExaltedReputation = 1
 CityLife.Custom.Legendary.Enchants.Enable = 1
 CityLife.Custom.Legendary.Gems.Enable = 1
 
-# Temporary T6 armor and legendary weapon appearances; real BiS stats, enchants and gems stay intact.
-# Requires this update of mod-transmog, with BOTH modules enabled and built statically.
-# Missing/disabled transmog keeps the real BiS appearance. Normal player transmog rules stay unchanged.
-# Only default TemplateGear profiles use these skins. DK keeps its BiS armor: there is no DK T6 set.
-# HideOffhand hides only the extra visual when a two-handed weapon skin is used; its stats remain.
-# No permanent appearance collection unlocks or learned mount are granted by these cosmetics.
-CityLife.Custom.Legendary.Skins.Enable = 1
-CityLife.Custom.Legendary.Skins.Armor.Enable = 1
-CityLife.Custom.Legendary.Skins.Weapons.Enable = 1
-CityLife.Custom.Legendary.Skins.HideOffhand = 1
-
-# "default" selects the bundled class-specific BiS profiles, with the separate cosmetic options above.
+# "default" selects the bundled class-specific BiS / legendary-weapon profiles.
 # To customize, use item-entry IDs separated by commas; separate alternative outfits with semicolons.
 # Example Warrior.Outfits = "51227,51229,51225,51226,51228,32837,32838"
 # Empty quotes disable that class's Legendary selection. Invalid/ineligible profiles are skipped.

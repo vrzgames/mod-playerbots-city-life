@@ -6,8 +6,6 @@
 
 #include "CityLifeCustomAppearance.h"
 #include "CityLifeLegendaryGear.h"
-#include "CityLifeLegendarySkins.h"
-#include "CityLifeLegendaryTransmog.h"
 
 #include "Bag.h"
 #include "Config.h"
@@ -57,16 +55,6 @@ namespace
     {
         return role == CityLife::CustomRole::Legendary || role == CityLife::CustomRole::Beggar ||
             role == CityLife::CustomRole::Fishing;
-    }
-
-    uint32 MountChoice(uint32 guid)
-    {
-        uint32 value = guid ^ 0x4D4F554Eu;
-        value ^= value >> 16;
-        value *= 0x7FEB352Du;
-        value ^= value >> 15;
-        value *= 0x846CA68Bu;
-        return value ^ (value >> 16);
     }
 
     uint8 OutfitSlot(ItemTemplate const* item, std::map<uint8, uint32> const& outfit)
@@ -152,36 +140,11 @@ namespace CityLife
         _templateGearEnabled = sConfigMgr->GetOption<bool>("CityLife.Custom.Legendary.TemplateGear.Enable", true);
         _enchantsEnabled = sConfigMgr->GetOption<bool>("CityLife.Custom.Legendary.Enchants.Enable", true);
         _gemsEnabled = sConfigMgr->GetOption<bool>("CityLife.Custom.Legendary.Gems.Enable", true);
-        _skinsEnabled = sConfigMgr->GetOption<bool>("CityLife.Custom.Legendary.Skins.Enable", true);
-        _armorSkinsEnabled = sConfigMgr->GetOption<bool>("CityLife.Custom.Legendary.Skins.Armor.Enable", true);
-        _weaponSkinsEnabled = sConfigMgr->GetOption<bool>("CityLife.Custom.Legendary.Skins.Weapons.Enable", true);
-        _hideSkinOffhand = sConfigMgr->GetOption<bool>("CityLife.Custom.Legendary.Skins.HideOffhand", true);
         _mountDisplayId = sConfigMgr->GetOption<uint32>("CityLife.Custom.Legendary.MountDisplayId", 21974);
         if (_mountDisplayId && !sCreatureDisplayInfoStore.LookupEntry(_mountDisplayId))
         {
             LOG_ERROR("module", "[CityLife.Custom] Invalid mount display {}; mount display disabled.", _mountDisplayId);
             _mountDisplayId = 0;
-        }
-        _randomizeMount = sConfigMgr->GetOption<bool>("CityLife.Custom.Legendary.Mount.Randomize", true);
-        _mountDisplayIds.clear();
-        std::string mounts = sConfigMgr->GetOption<std::string>(
-            "CityLife.Custom.Legendary.Mount.DisplayIds", "21974,15676");
-        std::replace(mounts.begin(), mounts.end(), ',', ' ');
-        std::istringstream mountList(mounts);
-        for (uint32 display; mountList >> display;)
-        {
-            if (!display || !sCreatureDisplayInfoStore.LookupEntry(display))
-            {
-                LOG_WARN("module", "[CityLife.Custom] Invalid randomized mount display {}; skipped.", display);
-                continue;
-            }
-            if (std::find(_mountDisplayIds.begin(), _mountDisplayIds.end(), display) == _mountDisplayIds.end())
-                _mountDisplayIds.push_back(display);
-        }
-        if (!mountList.eof())
-        {
-            LOG_WARN("module", "[CityLife.Custom] Invalid Mount.DisplayIds list; using the fixed mount display.");
-            _mountDisplayIds.clear();
         }
 
         _legendaryOutfits.clear();
@@ -234,9 +197,7 @@ namespace CityLife
                     }
                 if (valid && !outfit.Items.empty())
                 {
-                    if (useTemplate)
-                        AddTemplateOutfits(entry.Class, profile);
-                    else
+                    if (!useTemplate || !AddTemplateOutfits(entry.Class, profile, outfit))
                         _legendaryOutfits[entry.Class].push_back(std::move(outfit));
                 }
                 else
@@ -303,7 +264,7 @@ namespace CityLife
                 RecoverOnLogin(player);
     }
 
-    bool CustomAppearance::AddTemplateOutfits(uint8 classId, std::string const& profile)
+    bool CustomAppearance::AddTemplateOutfits(uint8 classId, std::string const& profile, Outfit const& iconic)
     {
         std::map<uint32, Outfit> variants;
         for (LegendaryGear::Row const& row : LegendaryGear::Rows)
@@ -319,12 +280,14 @@ namespace CityLife
         for (auto& variant : variants)
         {
             Outfit& outfit = variant.second;
-            // Actual weapons, enchants and gems always come from the same complete level-80 build.
-            // Iconic weapons are cosmetic skins; provider availability must never alter these stats.
+            // Keep the recognizable legendary weapons while taking every other slot from one coherent build.
+            for (auto const& entry : iconic.Items)
+                if (entry.first >= EQUIPMENT_SLOT_MAINHAND && entry.first <= EQUIPMENT_SLOT_RANGED)
+                    outfit.Items[entry.first] = entry.second;
             auto mainHand = outfit.Items.find(EQUIPMENT_SLOT_MAINHAND);
             if (mainHand != outfit.Items.end() && mainHand->second)
                 if (ItemTemplate const* item = sObjectMgr->GetItemTemplate(mainHand->second))
-                    if (item->InventoryType == INVTYPE_2HWEAPON && !outfit.Items.count(EQUIPMENT_SLOT_OFFHAND))
+                    if (item->InventoryType == INVTYPE_2HWEAPON)
                         outfit.Items[EQUIPMENT_SLOT_OFFHAND] = 0;
             bool valid = std::all_of(outfit.Items.begin(), outfit.Items.end(), [classId](auto const& entry)
             {
@@ -336,41 +299,12 @@ namespace CityLife
             });
             if (valid && !outfit.Items.empty())
             {
-                auto addSkin = [&](LegendarySkins::Row const& row)
-                {
-                    auto actual = outfit.Items.find(row.Slot);
-                    if (row.Class != classId || profile != row.Profile || actual == outfit.Items.end() ||
-                        !actual->second || row.Slot >= EQUIPMENT_SLOT_END)
-                        return;
-                    if (row.Item == LegendarySkins::HiddenItem)
-                    {
-                        if (_hideSkinOffhand && row.Slot == EQUIPMENT_SLOT_OFFHAND)
-                            outfit.Skins[row.Slot] = row.Item;
-                        return;
-                    }
-                    ItemTemplate const* skin = sObjectMgr->GetItemTemplate(row.Item);
-                    if (!skin || skin->Duration ||
-                        (skin->Class != ITEM_CLASS_ARMOR && skin->Class != ITEM_CLASS_WEAPON) ||
-                        (skin->AllowableClass & (1 << (classId - 1))) == 0)
-                    {
-                        LOG_WARN("module", "[CityLife.Custom] Invalid cosmetic item {} for profile {}; skipped.",
-                            row.Item, profile);
-                        return;
-                    }
-                    outfit.Skins[row.Slot] = row.Item;
-                };
-                if (_skinsEnabled && _armorSkinsEnabled)
-                    for (LegendarySkins::Row const& row : LegendarySkins::ArmorRows)
-                        addSkin(row);
-                if (_skinsEnabled && _weaponSkinsEnabled)
-                    for (LegendarySkins::Row const& row : LegendarySkins::WeaponRows)
-                        addSkin(row);
                 _legendaryOutfits[classId].push_back(std::move(outfit));
                 loaded = true;
             }
         }
         if (!loaded)
-            LOG_WARN("module", "[CityLife.Custom] Phase 4 profile {} unavailable; profile skipped.", profile);
+            LOG_WARN("module", "[CityLife.Custom] Phase 4 profile {} unavailable; using the iconic outfit.", profile);
         return loaded;
     }
 
@@ -495,20 +429,6 @@ namespace CityLife
     {
         if (outfit.RaceMask && (outfit.RaceMask & player->getRaceMask()) == 0)
             return false;
-        auto offHand = outfit.Items.find(EQUIPMENT_SLOT_OFFHAND);
-        if (offHand != outfit.Items.end() && offHand->second)
-        {
-            ItemTemplate const* offItem = sObjectMgr->GetItemTemplate(offHand->second);
-            if (offItem && offItem->Class == ITEM_CLASS_WEAPON && !player->CanDualWield())
-                return false;
-            auto mainHand = outfit.Items.find(EQUIPMENT_SLOT_MAINHAND);
-            ItemTemplate const* mainItem = mainHand != outfit.Items.end() ?
-                sObjectMgr->GetItemTemplate(mainHand->second) : nullptr;
-            if ((offItem && offItem->InventoryType == INVTYPE_2HWEAPON) ||
-                (mainItem && mainItem->InventoryType == INVTYPE_2HWEAPON))
-                if (!player->CanTitanGrip() || !player->CanDualWield())
-                    return false;
-        }
         std::vector<uint16> freeSlots = FreeGeneralSlots(player);
         std::size_t nextFree = 0;
         for (auto const& entry : outfit.Items)
@@ -716,22 +636,8 @@ namespace CityLife
 
         AppearanceState state;
         state.Role = role;
-        if (role == CustomRole::Legendary && _mountDisplayId)
-            state.TargetMountDisplayId = _randomizeMount && !_mountDisplayIds.empty() ?
-                _mountDisplayIds[MountChoice(guidLow) % _mountDisplayIds.size()] : _mountDisplayId;
         state.OriginalSheath = static_cast<uint8>(player->GetSheath());
         _active[guidLow] = state;
-
-        bool const useTransmog = role == CustomRole::Legendary && LegendaryTransmog::Available();
-        if (useTransmog)
-            for (auto const& entry : temporaryItems)
-                if (!LegendaryTransmog::RegisterTemporary(player, entry.second.get()))
-                {
-                    LOG_ERROR("module", "[CityLife.Custom] Could not register temporary cosmetics for {}; "
-                        "restoring original equipment.", player->GetGUID().ToString());
-                    End(player);
-                    return false;
-                }
 
         // Move every original first, including offhand items before equipping a two-handed weapon.
         for (EquipmentRecord const& record : records)
@@ -775,21 +681,6 @@ namespace CityLife
                 return false;
             }
         }
-        if (useTransmog)
-            for (auto const& [slot, skin] : outfit.Skins)
-            {
-                Item* item = player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
-                // KeepOriginal items are not in the journal and never receive a temporary cosmetic.
-                if (!IsTemporaryItem(player, item))
-                    continue;
-                if (!LegendaryTransmog::Apply(player, item, slot, skin))
-                {
-                    LOG_ERROR("module", "[CityLife.Custom] Could not apply temporary cosmetics for {}; "
-                        "restoring original equipment.", player->GetGUID().ToString());
-                    End(player);
-                    return false;
-                }
-            }
         _active[guidLow].Applied = true;
         Update(player, role);
         return true;
@@ -802,10 +693,10 @@ namespace CityLife
         auto found = _active.find(player->GetGUID().GetCounter());
         if (found == _active.end() || !found->second.Applied || found->second.Role != role)
             return;
-        if (role == CustomRole::Legendary && found->second.TargetMountDisplayId && !player->IsMounted())
+        if (role == CustomRole::Legendary && _mountDisplayId && !player->IsMounted())
         {
-            player->Mount(found->second.TargetMountDisplayId);
-            found->second.MountDisplayId = found->second.TargetMountDisplayId;
+            player->Mount(_mountDisplayId);
+            found->second.MountDisplayId = _mountDisplayId;
         }
     }
 
@@ -816,11 +707,6 @@ namespace CityLife
         for (EquipmentRecord const& record : records)
             if (record.OriginalGuid)
                 originals.insert(record.OriginalGuid);
-        // Destruction and orphan SQL cleanup both bypass the normal transmog delete hook in this core.
-        // Clear only exact registered temporary GUIDs, including items absent from the loaded inventory.
-        for (EquipmentRecord const& record : records)
-            if (record.TemporaryGuid && !originals.count(record.TemporaryGuid))
-                LegendaryTransmog::ForgetTemporary(player, record.TemporaryGuid);
         for (EquipmentRecord const& record : records)
         {
             if (record.Slot >= EQUIPMENT_SLOT_END)
@@ -982,20 +868,15 @@ namespace CityLife
 
     bool CustomAppearance::IsTemporaryItem(Player const* player, Item const* item) const
     {
-        if (!player || !item || item->GetOwnerGUID() != player->GetGUID())
+        if (!player || !item)
             return false;
         auto found = _pending.find(player->GetGUID().GetCounter());
         if (found == _pending.end())
             return false;
-        uint32 const itemGuid = item->GetGUID().GetCounter();
-        if (std::any_of(found->second.begin(), found->second.end(), [itemGuid](EquipmentRecord const& record)
-            { return record.OriginalGuid == itemGuid; }))
-            return false;
         return std::any_of(found->second.begin(), found->second.end(),
             [&](EquipmentRecord const& record)
             {
-                return record.Slot < EQUIPMENT_SLOT_END && record.TemporaryGuid && record.TemporaryGuid == itemGuid &&
-                    record.TemporaryEntry == item->GetEntry();
+                return record.TemporaryGuid && record.TemporaryGuid == item->GetGUID().GetCounter();
             });
     }
 }

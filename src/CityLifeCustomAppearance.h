@@ -52,7 +52,6 @@ namespace CityLife
         {
             std::map<uint8, uint32> Items;
             std::map<uint8, ItemBonuses> Bonuses;
-            std::map<uint8, uint32> Skins;
             uint32 RaceMask = 0;
         };
 
@@ -67,7 +66,6 @@ namespace CityLife
         struct AppearanceState
         {
             CustomRole Role = CustomRole::None;
-            uint32 TargetMountDisplayId = 0;
             uint32 MountDisplayId = 0;
             uint8 OriginalSheath = 0;
             bool Applied = false;
@@ -75,7 +73,7 @@ namespace CityLife
 
         bool IsOutfitUsable(Player* player, Outfit const& outfit) const;
         bool KeepOriginal(Player const* player, Outfit const& outfit, uint8 slot, Item const* item) const;
-        bool AddTemplateOutfits(uint8 classId, std::string const& profile);
+        bool AddTemplateOutfits(uint8 classId, std::string const& profile, Outfit const& iconic);
         void ApplyBonuses(Player* player, Item* item, ItemBonuses const& bonuses) const;
         std::vector<Outfit const*> UsableOutfits(Player* player, CustomRole role) const;
         Outfit const* FishingOutfit() const;
@@ -86,13 +84,7 @@ namespace CityLife
         bool _templateGearEnabled = true;
         bool _enchantsEnabled = true;
         bool _gemsEnabled = true;
-        bool _skinsEnabled = true;
-        bool _armorSkinsEnabled = true;
-        bool _weaponSkinsEnabled = true;
-        bool _hideSkinOffhand = true;
-        bool _randomizeMount = true;
         uint32 _mountDisplayId = 21974;
-        std::vector<uint32> _mountDisplayIds;
         Outfit _fishingOutfit;
         std::unordered_map<uint8, std::vector<Outfit>> _legendaryOutfits;
         std::unordered_map<uint32, std::vector<EquipmentRecord>> _pending;

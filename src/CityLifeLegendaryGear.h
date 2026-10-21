@@ -6,7 +6,7 @@
  * Original data commit: fefce753630fe2de19c92a8bfd12ca536b7ddff6
  * Snapshot revision: d536079191e6ecabb18273b3e46f7583ad19e355
  * https://github.com/azerothcore/mod-npc-talent-template
- * Extracted class/profile/race variants; cosmetic skins are separate from this real BiS equipment.
+ * Extracted class/profile/race variants; existing City Life iconic weapons override weapon slots.
  */
 
 #ifndef CITY_LIFE_LEGENDARY_GEAR_H

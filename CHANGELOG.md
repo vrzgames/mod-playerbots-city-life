@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-10-21 — Restore the previous Legendary equipment system
+
+- Restore the pre-transmog Legendary implementation: enchanted/gemmed BiS profiles with actual
+  iconic legendary weapon overrides and the Swift Spectral Tiger mount appearance.
+- Remove the experimental T6 transmog integration and its provider patch.
+- Keep The GOATS guild, varied HK/achievement history, fishing, beggars and every other Life feature.
+- Retain existing characters and equipment-recovery records; no database rollback is needed.
+
 ## 2026-10-21 — Major update: many fixes and new features
 
 City Life now includes PvP Life, Fishing Life and the expanded Custom city activities in one module.
@@ -12,18 +20,10 @@ rebuild and restart after updating; move the former standalone PvP Life folder o
 - Validate ground height, vertical layers and navmesh paths before choosing movement destinations.
 - Correct inventory transaction handling and preserve journal recovery across logout/restart.
 - Coordinate reservations so city, quest, PvP, Custom and Fishing activities do not borrow the same bot.
-- Clear temporary transmog caches during normal release and orphan-item recovery.
-- Keep the real Phase 4 BiS weapons and their bonuses underneath cosmetic legendary appearances.
 - Preserve existing named SQL records and personal values when applying additive data/config upgrades.
 - Correct Stormwind fishing clearance and align the Legendary group with its updated plaza anchor.
 
 ### New and expanded features
-
-- Keep the complete real Phase 4 BiS weapons and bonuses under separate T6/legendary cosmetics.
-- Integrate temporary appearances with the matching static mod-transmog through an optional bridge.
-- Bundle the optional mod-transmog provider patch and its verified upstream revision/apply instructions.
-- Add separate armor, weapon and visual offhand switches without changing ordinary transmog rules.
-- Choose a stable Spectral Tiger or Black Qiraji mount per Legendary character, with configurable choices.
 
 - Let beggars roam a bounded plaza area, pausing to beg or dance, with separate movement controls.
 - Add rare timed beggar trade requests with shared per-player cooldowns and automatic cancellation.

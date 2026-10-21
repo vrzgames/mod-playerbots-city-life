@@ -21,9 +21,8 @@ recovery and a managed-character registry; importing them does not modify existi
 Missing Custom data disables the affected Custom functions without preventing normal City Life or PvP from operating.
 
 The Legendary and beggar upgrades add C++ source files. Run CMake Configure/Generate once before
-rebuilding, so the persona, beggar-trade and optional transmog bridge implementations are collected.
-For T6/legendary skins, apply the [included mod-transmog patch](TRANSMOG_INTEGRATION.md) and build both modules
-statically. Existing Custom tables need no additional SQL import for these behaviors.
+rebuilding, so both the persona and beggar-trade implementations are collected. Existing Custom
+tables need no additional SQL import for these behaviors.
 
 `world_city_life_legendary_stormwind.sql` moves an older default Stormwind Legendary anchor
 closer to the plaza tree and aligns the group with the captured GM facing. Customized positions
@@ -99,13 +98,10 @@ PvP population settings retain their existing borrowing behavior.
 ### Legendary AFK characters
 
 By default, three level-80 bots stand at each city's plaza anchors in complete Phase 4 BiS outfits,
-with their real BiS weapons, enchants and gems. Temporary T6 armor and legendary weapon appearances
-sit over those items when the matching `mod-transmog` is available. Their default mount appearance
-is a stable per-character choice between Spectral Tiger and Black Qiraji Battle Tank.
-The bundled class/spec/race profiles come from
-`mod-npc-talent-template`; that module is not needed at runtime. See
-[gear data credits](LEGENDARY_GEAR_SOURCE.md) and [Legendary skins](LEGENDARY_SKINS.md).
-Mount appearance, item profiles, skins and enhancement switches are configurable in the Custom section.
+with enchants, gems, iconic weapons and a Swift Spectral Tiger appearance. The bundled class/spec/race
+profiles come from `mod-npc-talent-template`; that module is not needed at runtime. See
+[gear data credits](LEGENDARY_GEAR_SOURCE.md). Mount appearance, item profiles and enhancement switches
+are configurable in the Custom section.
 
 `CityLife.Custom.Legendary.FixedIdentity = 1` keeps the same registered module-managed character
 for each city and population slot, including after restart. This makes each legendary character
@@ -178,27 +174,16 @@ the character before normal AI resumes.
 
 ```ini
 CityLife.Custom.Legendary.MountDisplayId = 21974
-CityLife.Custom.Legendary.Mount.Randomize = 1
-CityLife.Custom.Legendary.Mount.DisplayIds = "21974,15676"
-CityLife.Custom.Legendary.Skins.Enable = 1
-CityLife.Custom.Legendary.Skins.Armor.Enable = 1
-CityLife.Custom.Legendary.Skins.Weapons.Enable = 1
-CityLife.Custom.Legendary.Skins.HideOffhand = 1
 CityLife.Custom.Legendary.Warrior.Outfits = "default"
 ```
 
 `MountDisplayId` is a creature display, not a spell/item ID. It displays the mount without teaching
-it permanently. `Mount.Randomize = 1` selects from `Mount.DisplayIds` by fixed character identity;
-`0` uses `MountDisplayId`. Empty or invalid lists fall back to that fixed value, and
-`MountDisplayId = 0` disables all Legendary mount appearances. Each class has its own `Outfits` option.
-`"default"` uses the bundled profiles;
+it permanently. Each class has its own `Outfits` option. `"default"` uses the bundled profiles;
 an empty string disables that class. A custom value is a comma-separated list of item entries;
 use semicolons between alternative outfits. Slots are inferred from the items. Profiles must
 satisfy ordinary item/class restrictions, including dual wielding and weapon skills.
 
-With `TemplateGear.Enable = 1`, default profiles use the complete bundled Phase 4 BiS gear.
-The following older physical Tier 10/legendary item lists apply only with `TemplateGear.Enable = 0`;
-explicit custom `Outfits` values also remain physical item lists. Each line is one alternative:
+The default profiles include the following item-entry lists. Each line is one alternative:
 
 - `Warrior`:
 

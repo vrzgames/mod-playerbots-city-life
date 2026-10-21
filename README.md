@@ -12,19 +12,18 @@ This update brings **City Life and PvP Life together**, expands city activity an
 many movement, equipment-recovery and configuration fixes.
 
 - **PvP Life is included:** world PvP, duel zones, real-player duel challenges and faction campaigns.
-- **One organized config:** 631 options, with separate city, quest-zone, PvP, Custom and Fishing sections.
+- **One organized config:** 625 options, with separate city, quest-zone, PvP, Custom and Fishing sections.
 - **More places to explore:** additional towns, faction quest hubs and world-PvP locations.
 - **Fishing Life:** 20 waterfront locations, 46 default slots, per-location populations and a separate bot pool.
 - **Custom city activity:** Legendary residents, roaming beggars with occasional trade requests,
   buyers, training scenes, player reactions and conversations.
 - **Recognizable Legendary characters:** class variety, The GOATS guild, varied HK/achievement history,
-  full enchanted/gemmed BiS gear, optional T6/legendary skins and stable random mount choices.
+  enchanted/gemmed BiS profiles, actual legendary weapons and a Swift Spectral Tiger mount.
 - **Many fixes:** checked movement paths and ground positions, equipment recovery and database
   transaction fixes, bot-reservation handling, fishing clearance and Stormwind plaza placement.
 - **Easier updates:** additive location SQL, a config migration tool and clear online-bot budget notes.
 
-See the [full changelog](CHANGELOG.md), [upgrade instructions](#installation) and
-[optional mod-transmog patch](docs/TRANSMOG_INTEGRATION.md).
+See the [full changelog](CHANGELOG.md) and [upgrade instructions](#installation).
 
 > [!IMPORTANT]
 > PvP Life is now part of this module. Move the old standalone `mod-playerbots-pvp-life` folder
@@ -41,11 +40,9 @@ Legendary residents now have full enchanted/gemmed Phase 4 BiS profiles, persist
 and the shared **The GOATS** guild. Configure class variety and each city's population independently.
 Their veteran history varies by fixed character identity: 11,000-25,000 HK and 5,100-6,000
 achievement-point targets by default, with separate range and fixed-value options in the config.
-Their real BiS items now support temporary **T6 armor and legendary weapon appearances**, plus a
-stable per-character **Spectral Tiger / Black Qiraji Battle Tank** mount selection. The armor/weapon
-cosmetics need the included [mod-transmog patch](docs/TRANSMOG_INTEGRATION.md), with both modules
-built statically. Mount choices work independently of mod-transmog.
-See [Legendary skins](docs/LEGENDARY_SKINS.md).
+Legendary residents use the previous equipment system: enchanted/gemmed BiS armor and accessories,
+actual iconic legendary weapons and a Swift Spectral Tiger mount appearance. No transmog integration
+is required. Original equipment is restored when the role ends.
 
 ## Fishing Life
 
@@ -107,7 +104,7 @@ default and can be disabled independently with `PvPLife.Enable = 0`.
 - Optional new towns and separate-faction quest starts; new locations default to disabled.
 - Included PvP Life systems with their existing zones, settings and `.pvplife` GM commands.
 - Custom legendary AFK characters, level-1 beggars, buyer advertisements and training scenes.
-- Legendary T6/weapon cosmetics preserve real Phase 4 BiS stats, enchants and gems.
+- Legendary BiS profiles include enchants, gems and class-specific legendary weapon overrides.
 - Beggars roam their plaza, pause to beg/dance, and occasionally request a short trade with nearby players.
 - Separate Fishing Life component with 20 waterfronts, per-location populations and its own provisioning pool.
 - Reactions to real-player emotes and short, coherent conversations between existing residents.
@@ -143,11 +140,6 @@ See [all locations and populations](docs/LOCATIONS.md). Questing remains globall
 - AzerothCore `azerothcore-wotlk` Playerbot branch
 - `mod-playerbots`
 - A configured pool of online random playerbots
-
-T6/legendary armor and weapon appearances optionally use
-[`azerothcore/mod-transmog`](https://github.com/azerothcore/mod-transmog) with the
-[included compatibility patch](docs/TRANSMOG_INTEGRATION.md). All other City Life, PvP Life,
-Fishing Life and Custom features work without that optional integration.
 
 Normal City Life and PvP borrow already-online playerbots. Custom roles can additionally create
 and log in module-owned participants when no eligible bot is available and
@@ -187,9 +179,7 @@ The bundled faction-specific Wintergrasp hubs maintain their own reserved popula
    `mod_playerbots_city_life.conf`. This is the only distributed module config. All old `CityLife.*`
    and `PvPLife.*` names and values are retained, except former `CityLife.Custom.Fishing.*`
    options now use `FishingLife.*`. The merge utility migrates those fishing values.
-7. For optional T6/legendary skins, follow [mod-transmog integration](docs/TRANSMOG_INTEGRATION.md)
-   and apply the included provider patch before configuring. The patch is not needed for other features.
-8. Reconfigure CMake, rebuild, then restart worldserver so the new binary discovers the sources and
+7. Reconfigure CMake, rebuild, then restart worldserver so the new binary discovers the sources and
    the single configuration filename.
 
 SQL files install location data; routine on/off and population adjustments are made in the config.
