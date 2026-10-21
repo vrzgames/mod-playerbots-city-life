@@ -1,10 +1,85 @@
 # Changelog
 
-## Unreleased - 2026-10-17
+## 2026-10-21 — Major update: many fixes and new features
+
+City Life now includes PvP Life, Fishing Life and the expanded Custom city activities in one module.
+This source update includes many fixes and a single organized configuration. Reconfigure CMake,
+rebuild and restart after updating; move the former standalone PvP Life folder outside `modules`.
+
+### Movement, recovery and compatibility fixes
+
+- Fix interrupted city relocation, repeated recovery teleports and unsafe straight-line movement.
+- Validate ground height, vertical layers and navmesh paths before choosing movement destinations.
+- Correct inventory transaction handling and preserve journal recovery across logout/restart.
+- Coordinate reservations so city, quest, PvP, Custom and Fishing activities do not borrow the same bot.
+- Clear temporary transmog caches during normal release and orphan-item recovery.
+- Keep the real Phase 4 BiS weapons and their bonuses underneath cosmetic legendary appearances.
+- Preserve existing named SQL records and personal values when applying additive data/config upgrades.
+- Correct Stormwind fishing clearance and align the Legendary group with its updated plaza anchor.
+
+### New and expanded features
+
+- Keep the complete real Phase 4 BiS weapons and bonuses under separate T6/legendary cosmetics.
+- Integrate temporary appearances with the matching static mod-transmog through an optional bridge.
+- Bundle the optional mod-transmog provider patch and its verified upstream revision/apply instructions.
+- Add separate armor, weapon and visual offhand switches without changing ordinary transmog rules.
+- Choose a stable Spectral Tiger or Black Qiraji mount per Legendary character, with configurable choices.
+
+- Let beggars roam a bounded plaza area, pausing to beg or dance, with separate movement controls.
+- Add rare timed beggar trade requests with shared per-player cooldowns and automatic cancellation.
+
+- Vary Legendary HK and achievement-point targets by persistent character identity, with configurable ranges.
+- Move the original Stormwind fishing anchor sideways so the bot leaves the trainer clear.
+
+- Give Fishing Life its own config section and `FishingLife.*` settings, independent of Custom.
+- Expand fishing to 20 waterfront locations with 46 default slots, separate populations and levels.
+- Add separate fishing provisioning settings/quota while retaining existing registered identities.
+- Validate water access before fishing placement, enforce spacing, and pause Wintergrasp during battles.
+- Add an additive fishing-location SQL update and migrate former Custom fishing config keys.
+
+- Add a default-on Custom city-life section with separate switches for six roles/behaviors.
+- Keep legendary characters recognizable through persistent per-city/per-slot identities by default.
+- Add per-city populations for legendary AFK characters, true level-1 beggars, buyer advertisements,
+  practice-dummy users; reactions and conversations reuse existing residents.
+- Add rerunnable WORLD locations/chat data, CHARACTERS equipment recovery and managed-bot storage.
+- Provision missing Custom participants at allowed levels on module-owned accounts, with a bounded,
+  reusable pool and gradual creation/login; never lower an existing character to fill a role.
+- Keep Custom roles within the shared 300-bot cap; document the 16 default Custom requests and updated
+  online-bot planning examples.
+
+- Document online-bot budgeting, the default 440-bot Life planning peak, and eligible free bots
+  for dungeons/BGs, including faction, level-bracket and role constraints for leveling populations.
+- Consolidate all 206 existing settings into one grouped City Life configuration, preserving defaults.
+- Add 14 optional towns, 17 faction quest hubs and seven PvP hotspots through rerunnable additive SQL.
+- Keep the original STV/Rebel Camp, Farshire/Warsong Hold and town populations unchanged.
+- Make explicit config Enable values authoritative while retaining live DB flags as custom-hub defaults.
+- Add a safe Python utility for migrating personal values from the former two config files.
+
+- Include PvP Life inside City Life, with its existing world-PvP hotspots, duel zones, real-player
+  challenges and faction campaigns.
+- Preserve all `CityLife.*` and `PvPLife.*` settings, `.citylife` and `.pvplife` commands, SQL
+  filenames and database table names. Existing data needs no migration for this merge.
+- PvP retains its enabled default and can be disabled independently
+  with `PvPLife.Enable = 0`, without requiring its WORLD tables while disabled.
+- Keep separate behavior managers and population settings, coordinated through shared bot
+  reservations.
+- Move the PvP implementation into this module and retire the standalone PvP source implementation.
+- Add combined installation/update guidance and preserve the full PvP reference and earlier
+  changelog under `docs/`.
+
+### Earlier movement and questing work included in this update
 
 - Fixed relocation being mistaken for leash escape and interrupted by recovery teleports (issue #1).
 - Validate randomized destination heights and reject unsafe straight-line/pathfinding fallbacks.
 - Add `.citylife races [hub|all]` to compare resident and available-candidate race distributions.
+- Added city populations for Booty Bay, Darkshire, Rebel Camp, Valiance Keep and Warsong Hold.
+- Added opt-in real Playerbots questing hubs around Rebel Camp, Farshire and Warsong Hold.
+- Added per-hub quest-zone, local-radius, idle-timeout and level settings, with scheduled rotation.
+- Keep questers separate from city stay, leash, social relocation and emote behavior.
+- Added an additive manual WORLD SQL update for existing installations; no live database changes
+  are applied by the module configuration.
+- Documented the shared 300-bot cap and the 340-bot total requested by all seeded hubs with questing
+  enabled at full time scaling.
 
 ## 0.2.0 - 2026-09-12
 

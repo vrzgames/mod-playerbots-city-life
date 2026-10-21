@@ -16,7 +16,8 @@ namespace PlayerbotsLife
     enum class ReservationOwner : std::uint8_t
     {
         CityLife,
-        PvPLife
+        PvPLife,
+        CustomLife
     };
 
     struct ReservationRegistry
@@ -44,6 +45,14 @@ namespace PlayerbotsLife
         std::lock_guard<std::mutex> lock(registry.Mutex);
         auto const [entry, inserted] = registry.Owners.emplace(guidLow, owner);
         return inserted || entry->second == owner;
+    }
+
+    inline bool IsReservedBy(std::uint32_t guidLow, ReservationOwner owner)
+    {
+        ReservationRegistry& registry = GetReservationRegistry();
+        std::lock_guard<std::mutex> lock(registry.Mutex);
+        auto found = registry.Owners.find(guidLow);
+        return found != registry.Owners.end() && found->second == owner;
     }
 
     inline void Release(std::uint32_t guidLow, ReservationOwner owner)

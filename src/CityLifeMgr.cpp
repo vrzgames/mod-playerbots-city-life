@@ -5,9 +5,15 @@
  */
 
 #include "CityLifeMgr.h"
+#include "CityLifeCustomActivities.h"
+#include "CityLifeCustomAppearance.h"
+#include "CityLifeCustomBotPool.h"
+#include "CityLifeCustomSocial.h"
+#include "CityLifeQuesting.h"
 #include "LifeBotReservation.h"
 
 #include "AreaDefines.h"
+#include "BattlefieldMgr.h"
 #include "Chat.h"
 #include "Config.h"
 #include "DatabaseEnv.h"
@@ -39,6 +45,7 @@
 #include <map>
 #include <shared_mutex>
 #include <sstream>
+#include <utility>
 
 namespace
 {
@@ -52,6 +59,28 @@ namespace
     constexpr float GroundLayerTolerance = 3.0f;
     constexpr float DestinationTolerance = 1.0f;
     constexpr float ArrivalTolerance = 1.5f;
+
+    std::vector<std::pair<float, float>> FishingOffsets(CityLife::Spot const& spot, float spacing)
+    {
+        std::vector<std::pair<float, float>> offsets;
+        if (!std::isfinite(spot.Radius) || spot.Radius < 0.0f)
+            return offsets;
+        // A bounded hexagonal grid provides real capacity; a full shoreline never falls back to stacking.
+        int32 extent = static_cast<int32>(std::min(64.0f, std::ceil(spot.Radius / spacing)));
+        for (int32 row = -extent; row <= extent; ++row)
+            for (int32 column = -extent; column <= extent; ++column)
+            {
+                float x = (column + (row % 2 == 0 ? 0.0f : 0.5f)) * spacing;
+                float y = row * spacing * 0.8660254f;
+                if (std::hypot(x, y) <= spot.Radius && offsets.size() < 2000)
+                    offsets.emplace_back(x, y);
+            }
+        std::stable_sort(offsets.begin(), offsets.end(), [](auto const& left, auto const& right)
+        {
+            return std::hypot(left.first, left.second) < std::hypot(right.first, right.second);
+        });
+        return offsets;
+    }
 
     bool ResolveGround(Player* player, uint32 mapId, float x, float y, float& z)
     {
@@ -95,6 +124,8 @@ namespace
             player->GetExactDist2d(resident.TargetX, resident.TargetY) <= ArrivalTolerance &&
             std::abs(player->GetPositionZ() - resident.TargetZ) <= DestinationTolerance;
     }
+    constexpr uint32 QuestingRetrySeconds = 10 * MINUTE;
+    constexpr uint32 QuestingActivityCheckSeconds = 30;
 
     std::string Lower(std::string value)
     {
@@ -223,6 +254,13 @@ namespace CityLife
 
     void Manager::LoadConfig()
     {
+        // Restore outfits with the old settings before reloading or disabling ambient roles.
+        for (auto resident = _residents.begin(); resident != _residents.end();)
+            if (resident->Custom != CustomRole::None && ReleaseResident(*resident, true))
+                resident = _residents.erase(resident);
+            else
+                ++resident;
+
         bool wasEnabled = _enable;
         bool enabled = sConfigMgr->GetOption<bool>("CityLife.Enable", true);
         if (wasEnabled && !enabled && !_residents.empty())
@@ -290,17 +328,40 @@ namespace CityLife
             _staticServiceCategories.insert(Lower(category));
         _nonCombatStrategies = sConfigMgr->GetOption<std::string>("CityLife.Strategies.NonCombat",
             "+stay,-follow,-passive,-grind,-rpg,-travel,-duel,-pvp");
+        _questingEnabled = sConfigMgr->GetOption<bool>("CityLife.Questing.Enable", false);
+        _fixedLegendaryIdentity = sConfigMgr->GetOption<bool>("CityLife.Custom.Legendary.FixedIdentity", true);
+        _fishingMinimumSpacing = std::clamp(
+            sConfigMgr->GetOption<float>("FishingLife.MinimumSpacing", 2.0f), 0.5f, 20.0f);
+        _fishingPauseDuringBattle = sConfigMgr->GetOption<bool>("FishingLife.Wintergrasp.PauseDuringBattle", true);
+        _beggarWanderEnabled = sConfigMgr->GetOption<bool>("CityLife.Custom.Beggar.Wander.Enable", true);
+        _beggarWanderRadius = sConfigMgr->GetOption<float>("CityLife.Custom.Beggar.Wander.Radius", 10.0f);
+        _beggarWanderRadius = std::isfinite(_beggarWanderRadius) ?
+            std::clamp(_beggarWanderRadius, 2.0f, 25.0f) : 10.0f;
+        _beggarWanderMinSeconds = std::clamp<uint32>(
+            sConfigMgr->GetOption<uint32>("CityLife.Custom.Beggar.Wander.MinSeconds", 10), 5, 3600);
+        _beggarWanderMaxSeconds = std::clamp<uint32>(
+            sConfigMgr->GetOption<uint32>("CityLife.Custom.Beggar.Wander.MaxSeconds", 25),
+            _beggarWanderMinSeconds, 3600);
+        _beggarWanderWalk = sConfigMgr->GetOption<bool>("CityLife.Custom.Beggar.Wander.Walk", false);
+        sCityLifeCustomBotPool.LoadConfig();
+        sCityLifeCustomBotPool.LoadData();
+        sCityLifeCustomActivities.LoadConfig();
+        sCityLifeCustomSocial.LoadConfig();
 
         ImportPlayerbotDefaults();
         _botAccountCache.clear();
         _startupElapsedMs = 0;
         _timerMs = 0;
+        _customTimerMs = 0;
 
         _databaseReady = VerifyDatabase();
         if (_enable && _databaseReady)
             _databaseReady = LoadData();
         if (_enable && !_databaseReady)
             _enable = false;
+        sCityLifeCustomBotPool.SyncHubs(_enable ? EffectiveHubs() : std::vector<Hub>{});
+        sCityLifeCustomActivities.LoadData();
+        sCityLifeCustomSocial.LoadData();
 
         LOG_INFO("module", "[CityLife] enable={} database={} hubs={} maxTotal={} timeScale={} prefix='{}'",
             _enable ? 1 : 0, _databaseReady ? 1 : 0, _hubs.size(), _maxTotalPopulation,
@@ -313,8 +374,8 @@ namespace CityLife
             return;
 
         std::string configuredPrefix = sConfigMgr->GetOption<std::string>(
-            "AiPlayerbot.RandomBotAccountPrefix", "rndbot");
-        uint32 loginDelay = sConfigMgr->GetOption<uint32>("AiPlayerbot.DisabledWithoutRealPlayerLoginDelay", 30);
+            "Playerbots.RandomBotAccountPrefix", "rndbot");
+        uint32 loginDelay = sConfigMgr->GetOption<uint32>("Playerbots.DisabledWithoutRealPlayerLoginDelay", 30);
         std::string prefix = Lower(_botAccountPrefix);
         if (prefix.empty() || prefix == "auto" || prefix == "playerbot" || prefix == "playerbots")
             _botAccountPrefix = configuredPrefix;
@@ -360,14 +421,26 @@ namespace CityLife
                 hub.DefaultPopulation = fields[7].Get<uint32>();
                 hub.Priority = fields[8].Get<uint32>();
                 std::string configPrefix = "CityLife.Hub." + hub.Name;
+                hub.Questing = sConfigMgr->GetOption<bool>(configPrefix + ".Questing", false, false);
+                hub.QuestZoneId = sConfigMgr->GetOption<uint32>(configPrefix + ".QuestZoneId", 0, false);
+                hub.QuestRadius = std::clamp(
+                    sConfigMgr->GetOption<float>(configPrefix + ".QuestRadius", 1200.0f, false), 100.0f, 5000.0f);
+                hub.QuestIdleSeconds = std::max<uint32>(60,
+                    sConfigMgr->GetOption<uint32>(configPrefix + ".QuestIdleSeconds", 300, false));
+                hub.MinLevel = static_cast<uint8>(std::clamp<uint32>(
+                    sConfigMgr->GetOption<uint32>(configPrefix + ".MinLevel", hub.MinLevel, false), 1, 80));
+                hub.MaxLevel = static_cast<uint8>(std::clamp<uint32>(
+                    sConfigMgr->GetOption<uint32>(configPrefix + ".MaxLevel", hub.MaxLevel, false), hub.MinLevel, 80));
                 hub.ConfiguredPopulation = sConfigMgr->GetOption<uint32>(
                     configPrefix + ".Population", hub.DefaultPopulation, false);
-                bool configEnabled = sConfigMgr->GetOption<bool>(
-                    configPrefix + ".Enable", true, false);
-                hub.Enabled = hub.Enabled && configEnabled;
+                hub.Enabled = sConfigMgr->GetOption<bool>(
+                    configPrefix + ".Enable", hub.Enabled, false);
+                if (hub.Questing)
+                    hub.Enabled = hub.Enabled && _questingEnabled && hub.QuestZoneId != 0;
                 hub.UseTimeScaling = sConfigMgr->GetOption<bool>(configPrefix + ".TimeScaling", true, false);
                 hub.ResidenceSeconds = sConfigMgr->GetOption<uint32>(
                     configPrefix + ".ResidenceSeconds", 0, false);
+                sCityLifeCustomActivities.ConfigureHub(hub);
                 hubs.push_back(hub);
             } while (hubResult->NextRow());
         }
@@ -400,6 +473,14 @@ namespace CityLife
         }
 
         _hubs.swap(hubs);
+        uint64 requestedPopulation = 0;
+        for (Hub const& hub : _hubs)
+            if (hub.Enabled)
+                requestedPopulation += hub.ConfiguredPopulation;
+        if (requestedPopulation > _maxTotalPopulation)
+            LOG_WARN("module", "[CityLife] Configured population {} exceeds MaxTotal={}; "
+                "lower-priority hubs may not reach their requested population.",
+                requestedPopulation, _maxTotalPopulation);
         LOG_INFO("module", "[CityLife] Loaded {} hubs and {} residents remain reserved.",
             _hubs.size(), _residents.size());
         return !_hubs.empty();
@@ -465,9 +546,12 @@ namespace CityLife
         if (!player || !player->GetSession() || !player->IsInWorld() || player->IsBeingTeleported())
             return false;
         if (!sRandomPlayerbotMgr.IsRandomBot(player) &&
+            !sCityLifeCustomBotPool.IsManagedBot(player->GetGUID().GetCounter()) &&
             !IsConfiguredBotAccount(player->GetSession()->GetAccountId()))
             return false;
         if (PlayerbotsLife::IsReserved(player->GetGUID().GetCounter()))
+            return false;
+        if (sCityLifeCustomAppearance.HasPendingRecovery(player))
             return false;
 
         PlayerbotAI* ai = GET_PLAYERBOT_AI(player);
@@ -494,6 +578,7 @@ namespace CityLife
         if (!player || !player->GetSession() || !player->IsInWorld())
             return false;
         if (!sRandomPlayerbotMgr.IsRandomBot(player) &&
+            !sCityLifeCustomBotPool.IsManagedBot(player->GetGUID().GetCounter()) &&
             !const_cast<Manager*>(this)->IsConfiguredBotAccount(player->GetSession()->GetAccountId()))
             return false;
         PlayerbotAI* ai = GET_PLAYERBOT_AI(player);
@@ -519,6 +604,7 @@ namespace CityLife
     std::vector<BotCandidate> Manager::LoadCandidates(Hub const& hub, bool applyLimit)
     {
         std::vector<BotCandidate> candidates;
+        uint32 const now = GameTimeSeconds();
         std::vector<uint32> onlineGuids;
         {
             std::shared_lock<std::shared_mutex> playerLock(*HashMapHolder<Player>::GetLock());
@@ -536,6 +622,22 @@ namespace CityLife
                 continue;
             if (!IsCandidate(player))
                 continue;
+            bool managed = sCityLifeCustomBotPool.IsManagedBot(guidLow);
+            if ((managed && (hub.Custom == CustomRole::None ||
+                !sCityLifeCustomBotPool.IsAssignedTo(guidLow, hub))) ||
+                (hub.Custom == CustomRole::Legendary && _fixedLegendaryIdentity && !managed) ||
+                !sCityLifeCustomActivities.CanUse(player, hub.Custom))
+                continue;
+            if (hub.Questing)
+            {
+                uint64 const key = (static_cast<uint64>(hub.Id) << 32) | guidLow;
+                auto cooldown = _questerCooldownUntil.find(key);
+                PlayerbotAI* ai = GET_PLAYERBOT_AI(player);
+                if ((cooldown != _questerCooldownUntil.end() && cooldown->second > now) ||
+                    player->IsNonMeleeSpellCast(false) || player->GetTransport() || !ai ||
+                    ai->GetState() != BOT_STATE_NON_COMBAT || !ai->AllowActivity(ALL_ACTIVITY))
+                    continue;
+            }
             if (player->GetZoneId() == AREA_WINTERGRASP)
                 continue;
 
@@ -597,6 +699,9 @@ namespace CityLife
                 {
                     return resident.HubId == hub.Id && resident.SpotId == spot.Id;
                 }));
+            if (hub.Custom == CustomRole::Fishing &&
+                occupants >= FishingOffsets(spot, _fishingMinimumSpacing).size())
+                continue;
             uint64 weight = spot.Weight;
             if (IsStaticServiceSpot(hub, spot))
                 weight = weight * _serviceSpotWeightMultiplier / 100;
@@ -638,12 +743,42 @@ namespace CityLife
 
     uint32 Manager::TargetPopulation(Hub const& hub) const
     {
-        if (!hub.Enabled || hub.Spots.empty())
+        if (!hub.Enabled || hub.Spots.empty() || IsFishingPaused(hub))
             return 0;
-        if (!hub.UseTimeScaling)
-            return hub.ConfiguredPopulation;
-        return static_cast<uint32>(std::lround(
-            static_cast<double>(hub.ConfiguredPopulation) * CurrentTimeMultiplier() / 100.0));
+        uint32 population = hub.UseTimeScaling ? static_cast<uint32>(std::lround(
+            static_cast<double>(hub.ConfiguredPopulation) * CurrentTimeMultiplier() / 100.0)) :
+            hub.ConfiguredPopulation;
+        if (hub.Custom == CustomRole::Fishing)
+        {
+            uint32 capacity = 0;
+            for (Spot const& spot : hub.Spots)
+                capacity += static_cast<uint32>(FishingOffsets(spot, _fishingMinimumSpacing).size());
+            population = std::min(population, capacity);
+        }
+        return population;
+    }
+
+    bool Manager::IsFishingPaused(Hub const& hub) const
+    {
+        if (!_fishingPauseDuringBattle || hub.Custom != CustomRole::Fishing ||
+            hub.CustomCity.rfind("Wintergrasp", 0) != 0)
+            return false;
+        Battlefield* battlefield = sBattlefieldMgr->GetBattlefieldByBattleId(BATTLEFIELD_BATTLEID_WG);
+        return battlefield && battlefield->IsWarTime();
+    }
+
+    std::vector<Hub> Manager::EffectiveHubs() const
+    {
+        std::vector<Hub> hubs = _hubs;
+        uint32 remaining = _maxTotalPopulation;
+        for (Hub& hub : hubs)
+        {
+            hub.ConfiguredPopulation = std::min(TargetPopulation(hub), remaining);
+            remaining -= hub.ConfiguredPopulation;
+            hub.Enabled = hub.Enabled && hub.ConfiguredPopulation != 0;
+            hub.UseTimeScaling = false;
+        }
+        return hubs;
     }
 
     bool Manager::AssignSpot(Resident& resident, Hub const& hub, Spot const& spot, bool allowStationary)
@@ -652,49 +787,82 @@ namespace CityLife
         if (!player || !std::isfinite(spot.Radius) || !std::isfinite(spot.O))
             return false;
 
-        for (uint32 attempt = 0; attempt < DestinationAttempts; ++attempt)
+        bool fishing = hub.Custom == CustomRole::Fishing;
+        std::vector<std::pair<float, float>> offsets = fishing ?
+            FishingOffsets(spot, _fishingMinimumSpacing) : std::vector<std::pair<float, float>>{};
+        uint32 attempts = fishing ? static_cast<uint32>(offsets.size()) : DestinationAttempts;
+        for (uint32 attempt = 0; attempt < attempts; ++attempt)
         {
-            float const angle = frand(0.0f, TwoPi);
-            float const distance = attempt + 1 < DestinationAttempts ? frand(0.0f, spot.Radius) : 0.0f;
-            float const x = spot.X + std::cos(angle) * distance;
-            float const y = spot.Y + std::sin(angle) * distance;
+            bool fixed = hub.Custom == CustomRole::Legendary && _fixedLegendaryIdentity;
+            uint32 slot = fixed ? sCityLifeCustomBotPool.GetSlot(resident.Bot.GuidLow) : 0;
+            // A stable spiral keeps each named showoff at the same safe spot after restart.
+            float const angle = fixed ? slot * 2.39996323f + attempt * 0.2f : frand(0.0f, TwoPi);
+            float const distance = fixed ? std::min(spot.Radius, std::sqrt(static_cast<float>(slot)) * 2.5f) :
+                (attempt + 1 < DestinationAttempts ? frand(0.0f, spot.Radius) : 0.0f);
+            float const x = spot.X + (fishing ? offsets[attempt].first : std::cos(angle) * distance);
+            float const y = spot.Y + (fishing ? offsets[attempt].second : std::sin(angle) * distance);
             float z = spot.Z;
             if (!ResolveGround(player, hub.MapId, x, y, z))
                 continue;
+            float facing = spot.O;
+            if (fishing)
+            {
+                bool occupied = std::any_of(_residents.begin(), _residents.end(), [&](Resident const& other)
+                {
+                    return other.Bot.GuidLow != resident.Bot.GuidLow && other.Custom == CustomRole::Fishing &&
+                        other.TargetMap == hub.MapId && std::abs(other.TargetZ - z) < GroundLayerTolerance &&
+                        std::hypot(other.TargetX - x, other.TargetY - y) < _fishingMinimumSpacing - 0.01f;
+                });
+                if (occupied || !sCityLifeCustomActivities.FindFishingWater(player, hub.MapId, x, y, z, facing))
+                    continue;
+            }
             resident.HubId = hub.Id;
             resident.SpotId = spot.Id;
             resident.TargetMap = hub.MapId;
             resident.TargetX = x;
             resident.TargetY = y;
             resident.TargetZ = z;
-            resident.TargetO = spot.O;
+            resident.TargetO = facing;
             resident.Stationary = allowStationary && IsStaticServiceSpot(hub, spot) &&
                 urand(1, 100) <= _staticServiceChance;
+            if (hub.Custom != CustomRole::None)
+                resident.Stationary = true;
             return true;
         }
         if (_debug)
-            LOG_WARN("module", "[CityLife] No safe ground/MMAP destination for {}/{}.", hub.Name, spot.Name);
+            LOG_WARN("module", "[CityLife] No safe, unoccupied destination for {}/{}.", hub.Name, spot.Name);
         return false;
     }
 
-    bool Manager::AddResident(Hub const& hub)
+    bool Manager::AddResident(Hub const& hub, uint32 targetPopulation)
     {
         Spot const* spot = ChooseSpot(hub);
         if (!spot)
             return false;
         std::vector<BotCandidate> candidates = LoadCandidates(hub);
         if (candidates.empty())
+        {
+            if (hub.Custom != CustomRole::None)
+            {
+                Hub request = hub;
+                request.ConfiguredPopulation = targetPopulation;
+                sCityLifeCustomBotPool.RequestBot(request);
+            }
             return false;
+        }
 
         BotCandidate const& bot = candidates.front();
         Player* player = FindPlayer(bot.GuidLow);
         if (!IsCandidate(player))
             return false;
-        if (!PlayerbotsLife::TryReserve(bot.GuidLow, PlayerbotsLife::ReservationOwner::CityLife))
+        PlayerbotsLife::ReservationOwner owner = hub.Custom == CustomRole::None ?
+            PlayerbotsLife::ReservationOwner::CityLife : PlayerbotsLife::ReservationOwner::CustomLife;
+        if (!PlayerbotsLife::TryReserve(bot.GuidLow, owner))
             return false;
 
         Resident resident;
         resident.Bot = bot;
+        resident.Custom = hub.Custom;
         resident.OriginalMap = player->GetMapId();
         resident.OriginalX = player->GetPositionX();
         resident.OriginalY = player->GetPositionY();
@@ -702,23 +870,86 @@ namespace CityLife
         resident.OriginalO = player->GetOrientation();
         if (!AssignSpot(resident, hub, *spot, true))
         {
-            PlayerbotsLife::Release(bot.GuidLow, PlayerbotsLife::ReservationOwner::CityLife);
+            PlayerbotsLife::Release(bot.GuidLow, owner);
             return false;
         }
 
         uint32 now = GameTimeSeconds();
         resident.NextMoveAt = now + urand(_relocateMinSeconds, _relocateMaxSeconds);
+        if (hub.Custom == CustomRole::Beggar)
+            resident.NextMoveAt = now + urand(_beggarWanderMinSeconds, _beggarWanderMaxSeconds);
         resident.NextEmoteAt = now + urand(_emoteMinSeconds, _emoteMaxSeconds);
         resident.NextReservationRefreshAt = now + ReservationRefreshSeconds;
+        resident.NextActivityCheckAt = now + QuestingActivityCheckSeconds;
         resident.ReleaseAt = hub.ResidenceSeconds == 0 ? 0 : now + hub.ResidenceSeconds;
 
-        if (!TeleportBot(player, hub.MapId, resident.TargetX, resident.TargetY, resident.TargetZ, resident.TargetO))
+        if (hub.Custom != CustomRole::None && !sCityLifeCustomActivities.Begin(player, hub.Custom))
         {
-            PlayerbotsLife::Release(bot.GuidLow, PlayerbotsLife::ReservationOwner::CityLife);
+            PlayerbotsLife::Release(bot.GuidLow, owner);
             return false;
         }
-        ApplyCityStrategies(player);
-        SetStayPosition(player, resident);
+        if (hub.Custom != CustomRole::None && sRandomPlayerbotMgr.IsRandomBot(player))
+        {
+            resident.OriginalRandomize = sRandomPlayerbotMgr.GetValue(bot.GuidLow, "randomize");
+            resident.RandomizeHeld = true;
+            sRandomPlayerbotMgr.SetValue(bot.GuidLow, "randomize", 1);
+            sRandomPlayerbotMgr.ScheduleTeleport(bot.GuidLow,
+                std::max(ReservationSeconds, hub.ResidenceSeconds + MINUTE));
+        }
+
+        if (hub.Questing)
+        {
+            Spot const& center = hub.Spots.front();
+            QuestingArea area;
+            area.MapId = hub.MapId;
+            area.ZoneId = hub.QuestZoneId;
+            area.X = center.X;
+            area.Y = center.Y;
+            area.Z = center.Z;
+            area.O = center.O;
+            area.Radius = hub.QuestRadius;
+            for (Spot const& waypoint : hub.Spots)
+                area.Waypoints.push_back({waypoint.X, waypoint.Y, waypoint.Z});
+            resident.Questing = StartQuesting(player, area, _questingControls[bot.GuidLow]);
+            if (!resident.Questing)
+            {
+                PlayerbotsLife::Release(bot.GuidLow, owner);
+                return false;
+            }
+            _questingControls[bot.GuidLow] = resident.Questing;
+        }
+        if (!TeleportBot(player, hub.MapId, resident.TargetX, resident.TargetY, resident.TargetZ, resident.TargetO))
+        {
+            StopQuesting(resident.Questing);
+            if (hub.Custom != CustomRole::None && !sCityLifeCustomActivities.End(player))
+            {
+                // Keep the bot reserved and paused until its durable equipment journal can be restored.
+                _residents.push_back(resident);
+                return true;
+            }
+            if (resident.RandomizeHeld)
+            {
+                sRandomPlayerbotMgr.SetValue(bot.GuidLow, "randomize", resident.OriginalRandomize);
+                sRandomPlayerbotMgr.ScheduleTeleport(bot.GuidLow);
+            }
+            PlayerbotsLife::Release(bot.GuidLow, owner);
+            return false;
+        }
+        if (resident.Questing)
+        {
+            ApplyQuestingStrategies(player, true);
+            if (sRandomPlayerbotMgr.IsRandomBot(player))
+            {
+                resident.OriginalRandomize = sRandomPlayerbotMgr.GetValue(bot.GuidLow, "randomize");
+                resident.RandomizeHeld = true;
+                sRandomPlayerbotMgr.SetValue(bot.GuidLow, "randomize", 1);
+            }
+        }
+        else
+        {
+            ApplyCityStrategies(player);
+            SetStayPosition(player, resident);
+        }
         if (sRandomPlayerbotMgr.IsRandomBot(player))
             sRandomPlayerbotMgr.ScheduleTeleport(bot.GuidLow,
                 std::max(ReservationSeconds, hub.ResidenceSeconds + MINUTE));
@@ -730,12 +961,26 @@ namespace CityLife
         return true;
     }
 
-    void Manager::ReleaseResident(Resident const& resident, bool returnHome)
+    bool Manager::ReleaseResident(Resident const& resident, bool returnHome)
     {
-        PlayerbotsLife::Release(resident.Bot.GuidLow, PlayerbotsLife::ReservationOwner::CityLife);
         Player* player = FindPlayer(resident.Bot.GuidLow);
+        if (resident.Custom == CustomRole::Beggar && player && !player->IsInCombat() &&
+            resident.MovementSplineId && player->movespline->GetId() == resident.MovementSplineId)
+            player->StopMoving();
+        if (resident.Custom != CustomRole::None)
+        {
+            if (player && !sCityLifeCustomActivities.End(player))
+                return false;
+            sCityLifeCustomActivities.Forget(resident.Bot.GuidLow);
+        }
+        sCityLifeCustomSocial.Remove(resident.Bot.GuidLow);
+        StopQuesting(resident.Questing);
+        if (resident.RandomizeHeld)
+            sRandomPlayerbotMgr.SetValue(resident.Bot.GuidLow, "randomize", resident.OriginalRandomize);
+        PlayerbotsLife::Release(resident.Bot.GuidLow, resident.Custom == CustomRole::None ?
+            PlayerbotsLife::ReservationOwner::CityLife : PlayerbotsLife::ReservationOwner::CustomLife);
         if (!player || !player->GetSession())
-            return;
+            return true;
 
         if (resident.MovementSplineId != 0 && player->movespline->GetId() == resident.MovementSplineId &&
             !player->IsInCombat())
@@ -750,13 +995,15 @@ namespace CityLife
                 LOG_WARN("module", "[CityLife] {} could not return safely; released at current position.",
                     resident.Bot.Name);
         }
+        return true;
     }
 
     void Manager::ReleaseAll(bool returnHome)
     {
-        for (Resident const& resident : _residents)
-            ReleaseResident(resident, returnHome && _returnBots);
-        _residents.clear();
+        std::erase_if(_residents, [&](Resident const& resident)
+        {
+            return ReleaseResident(resident, returnHome && _returnBots);
+        });
     }
 
     void Manager::RemoveUnavailableResidents()
@@ -768,24 +1015,77 @@ namespace CityLife
             Player* player = FindPlayer(resident->Bot.GuidLow);
             Hub* hub = FindHub(resident->HubId);
             bool residenceExpired = resident->ReleaseAt != 0 && resident->ReleaseAt <= now && player &&
-                !player->IsInCombat() && !player->IsBeingTeleported();
-            bool const movementUnavailable = player && !player->IsBeingTeleported() &&
+                !player->IsInCombat() && !player->IsBeingTeleported() &&
+                (!resident->Questing || !player->IsNonMeleeSpellCast(false));
+            bool const canRotate = player && !player->IsInCombat() && !player->IsBeingTeleported() &&
+                !player->IsNonMeleeSpellCast(false) && !player->IsInFlight();
+            bool const questingChanged = hub && hub->Questing != static_cast<bool>(resident->Questing);
+            bool questingInactive = false;
+            if (resident->Questing && canRotate && resident->NextActivityCheckAt <= now)
+            {
+                PlayerbotAI* ai = GET_PLAYERBOT_AI(player);
+                questingInactive = !ai || !ai->AllowActivity(ALL_ACTIVITY, true);
+                resident->NextActivityCheckAt = now + QuestingActivityCheckSeconds;
+            }
+            bool questAreaChanged = false;
+            if (hub && resident->Questing)
+            {
+                auto area = resident->Questing->Area.load();
+                questAreaChanged = area && (area->MapId != hub->MapId || area->ZoneId != hub->QuestZoneId ||
+                    area->Radius != hub->QuestRadius || area->Waypoints.size() != hub->Spots.size());
+                if (area && !hub->Spots.empty())
+                {
+                    Spot const& center = hub->Spots.front();
+                    questAreaChanged = questAreaChanged || area->X != center.X || area->Y != center.Y ||
+                        area->Z != center.Z;
+                    if (!questAreaChanged)
+                        for (size_t index = 0; index < hub->Spots.size(); ++index)
+                        {
+                            Spot const& spot = hub->Spots[index];
+                            QuestingWaypoint const& waypoint = area->Waypoints[index];
+                            if (waypoint.X != spot.X || waypoint.Y != spot.Y || waypoint.Z != spot.Z)
+                            {
+                                questAreaChanged = true;
+                                break;
+                            }
+                        }
+                }
+            }
+            bool const questingExpired = resident->Questing && hub && canRotate &&
+                (questingInactive || now - resident->Questing->LastActivityAt.load() >= hub->QuestIdleSeconds ||
+                    player->GetLevel() < hub->MinLevel || player->GetLevel() > hub->MaxLevel);
+            bool const movementUnavailable = !resident->Questing && player && !player->IsBeingTeleported() &&
                 (player->IsFlying() || player->GetTransport() || player->GetVehicle() || player->GetTransGUID() ||
                     player->HasUnitMovementFlag(MOVEMENTFLAG_CAN_FLY | MOVEMENTFLAG_DISABLE_GRAVITY |
                         MOVEMENTFLAG_ONTRANSPORT) || (hub && player->GetMapId() != hub->MapId));
-            if (!hub || !IsResidentUsable(player) || residenceExpired || movementUnavailable)
+            if (!hub || !IsResidentUsable(player) || residenceExpired || movementUnavailable ||
+                ((questingChanged || questAreaChanged) && canRotate) || questingExpired)
             {
-                ReleaseResident(*resident, residenceExpired && _returnBots);
-                resident = _residents.erase(resident);
+                if (questingExpired)
+                {
+                    uint64 const key = (static_cast<uint64>(resident->HubId) << 32) | resident->Bot.GuidLow;
+                    _questerCooldownUntil[key] = now + QuestingRetrySeconds;
+                    if (_debug)
+                        LOG_INFO("module", "[CityLife] Rotating quester {} from {}: "
+                            "inactive, idle or outside level bracket.",
+                            resident->Bot.Name, hub->Name);
+                }
+                if (ReleaseResident(*resident, (residenceExpired || questingExpired) && _returnBots))
+                    resident = _residents.erase(resident);
+                else
+                    ++resident;
             }
             else
                 ++resident;
         }
+        std::erase_if(_questingControls, [](auto const& entry) { return entry.second.expired(); });
+        std::erase_if(_questerCooldownUntil, [now](auto const& entry) { return entry.second <= now; });
     }
 
     void Manager::MaintainPopulation()
     {
         RemoveUnavailableResidents();
+        sCityLifeCustomBotPool.SyncHubs(EffectiveHubs());
 
         std::unordered_map<uint32, uint32> targets;
         uint32 remaining = _maxTotalPopulation;
@@ -807,12 +1107,14 @@ namespace CityLife
                     {
                         Player* player = FindPlayer(resident.Bot.GuidLow);
                         return resident.HubId == hub.Id && player && !player->IsInCombat() &&
-                            !player->IsBeingTeleported();
+                            !player->IsBeingTeleported() &&
+                            (!resident.Questing || !player->IsNonMeleeSpellCast(false));
                     });
                 if (found == _residents.rend())
                     break;
                 auto eraseAt = std::next(found).base();
-                ReleaseResident(*eraseAt, _returnBots);
+                if (!ReleaseResident(*eraseAt, _returnBots))
+                    break;
                 _residents.erase(eraseAt);
                 ++changes;
             }
@@ -844,7 +1146,7 @@ namespace CityLife
 
             if (!selectedHub)
                 break;
-            if (AddResident(*selectedHub))
+            if (AddResident(*selectedHub, selectedTarget))
             {
                 ++changes;
                 continue;
@@ -882,6 +1184,44 @@ namespace CityLife
             LOG_INFO("module", "[CityLife] {} walks to {}/{}.", resident.Bot.Name, hub.Name, spot->Name);
     }
 
+    Spot const* Manager::BeggarAnchor(Resident const& resident) const
+    {
+        auto hub = std::find_if(_hubs.begin(), _hubs.end(), [&](Hub const& candidate)
+        {
+            return candidate.Id == resident.HubId;
+        });
+        if (hub == _hubs.end())
+            return nullptr;
+        auto spot = std::find_if(hub->Spots.begin(), hub->Spots.end(), [&](Spot const& candidate)
+        {
+            return candidate.Id == resident.SpotId;
+        });
+        return spot == hub->Spots.end() ? nullptr : &*spot;
+    }
+
+    void Manager::WanderBeggar(Player* player, Resident& resident, Hub const& hub)
+    {
+        resident.NextMoveAt = GameTimeSeconds() + urand(_beggarWanderMinSeconds, _beggarWanderMaxSeconds);
+        Spot const* anchor = BeggarAnchor(resident);
+        if (!anchor)
+            return;
+        Spot area = *anchor;
+        area.Radius = _beggarWanderRadius;
+        for (uint32 attempt = 0; attempt < DestinationAttempts; ++attempt)
+        {
+            Resident destination = resident;
+            if (!AssignSpot(destination, hub, area, false) ||
+                player->GetExactDist2d(destination.TargetX, destination.TargetY) < 2.0f)
+                continue;
+            destination.MovementRetries = 0;
+            destination.RetryMoveAt = 0;
+            if (!StartMovement(player, destination))
+                continue;
+            resident = std::move(destination);
+            return;
+        }
+    }
+
     void Manager::MaintainResidents()
     {
         uint32 now = GameTimeSeconds();
@@ -897,6 +1237,8 @@ namespace CityLife
                 sRandomPlayerbotMgr.ScheduleTeleport(resident.Bot.GuidLow,
                     std::max(ReservationSeconds, hub->ResidenceSeconds + MINUTE));
                 resident.NextReservationRefreshAt = now + ReservationRefreshSeconds;
+                if (resident.Questing || resident.Custom != CustomRole::None)
+                    sRandomPlayerbotMgr.SetValue(resident.Bot.GuidLow, "randomize", 1);
             }
 
             if (player->IsInCombat() || player->duel || player->IsInFlight() ||
@@ -910,6 +1252,40 @@ namespace CityLife
                 }
                 resident.RetryMoveAt = now + MovementRetrySeconds;
                 continue;
+            }
+
+            if (resident.Questing)
+            {
+                if (!resident.Questing->Attached.load())
+                {
+                    auto area = resident.Questing->Area.load();
+                    auto replacement = area ?
+                        StartQuesting(player, *area, _questingControls[resident.Bot.GuidLow]) : nullptr;
+                    if (replacement)
+                    {
+                        resident.Questing = replacement;
+                        _questingControls[resident.Bot.GuidLow] = replacement;
+                    }
+                }
+                ApplyQuestingStrategies(player);
+                continue;
+            }
+
+            if (resident.Custom == CustomRole::Beggar)
+            {
+                if (player->GetTradeData())
+                {
+                    if (resident.MovementSplineId && player->movespline->GetId() == resident.MovementSplineId)
+                        player->StopMoving();
+                    resident.Travelling = false;
+                    resident.MovementSplineId = 0;
+                    resident.MovementRetries = 0;
+                    resident.RetryMoveAt = 0;
+                    resident.NextMoveAt = now + urand(_beggarWanderMinSeconds, _beggarWanderMaxSeconds);
+                    continue;
+                }
+                if (!resident.Travelling && !sCityLifeCustomActivities.CanBeggarWander(player))
+                    continue;
             }
 
             ApplyCityStrategies(player);
@@ -958,7 +1334,14 @@ namespace CityLife
             }
             resident.RetryMoveAt = 0;
 
-            if (_roaming && !resident.Stationary && resident.NextMoveAt <= now)
+            if (resident.Custom == CustomRole::Beggar && _beggarWanderEnabled && resident.NextMoveAt <= now)
+            {
+                WanderBeggar(player, resident, *hub);
+                continue;
+            }
+
+            if (_roaming && !resident.Stationary && resident.NextMoveAt <= now &&
+                !sCityLifeCustomSocial.IsConversing(resident.Bot.GuidLow))
             {
                 RelocateResident(resident, *hub);
                 continue;
@@ -966,7 +1349,11 @@ namespace CityLife
 
             SetStayPosition(player, resident);
 
-            if (_emotes && resident.NextEmoteAt <= now)
+            if (resident.Custom != CustomRole::None)
+                continue;
+
+            if (_emotes && resident.NextEmoteAt <= now &&
+                !sCityLifeCustomSocial.IsConversing(resident.Bot.GuidLow))
             {
                 if (!player->isMoving() && urand(1, 100) <= _emoteChance)
                     TryEmote(player);
@@ -996,6 +1383,23 @@ namespace CityLife
         }
     }
 
+    void Manager::ApplyQuestingStrategies(Player* player, bool force) const
+    {
+        PlayerbotAI* ai = GET_PLAYERBOT_AI(player);
+        if (!ai)
+            return;
+
+        bool needsUpdate = force || !ai->HasStrategy("new rpg", BOT_STATE_NON_COMBAT) ||
+            !ai->HasStrategy("grind", BOT_STATE_NON_COMBAT) || !ai->HasStrategy("quest", BOT_STATE_NON_COMBAT) ||
+            !ai->HasStrategy("loot", BOT_STATE_NON_COMBAT);
+        for (char const* strategy : {"stay", "follow", "passive", "rpg", "travel", "move random", "duel", "pvp",
+            "bg", "lfg", "start duel"})
+            needsUpdate = needsUpdate || ai->HasStrategy(strategy, BOT_STATE_NON_COMBAT);
+        if (needsUpdate)
+            ai->ChangeStrategy("+new rpg,+grind,+quest,+loot,+gather,-stay,-follow,-passive,-rpg,-travel,"
+                "-move random,-duel,-pvp,-bg,-lfg,-start duel", BOT_STATE_NON_COMBAT);
+    }
+
     void Manager::SetStayPosition(Player* player, Resident const& /*resident*/) const
     {
         PlayerbotAI* ai = GET_PLAYERBOT_AI(player);
@@ -1016,6 +1420,7 @@ namespace CityLife
         PositionInfo stay = positions["stay"];
         stay.Reset();
         positions["stay"] = stay;
+        ai->rpgInfo.Reset();
         ai->ResetStrategies();
     }
 
@@ -1033,6 +1438,7 @@ namespace CityLife
     {
         if (!player || player->GetMapId() != resident.TargetMap || player->IsBeingTeleported() ||
             player->IsInCombat() || player->IsNonMeleeSpellCast(false) ||
+            (resident.Custom == CustomRole::Beggar && player->GetTradeData()) ||
             player->HasUnitState(UNIT_STATE_NOT_MOVE) || player->GetTransport() || player->GetVehicle() ||
             player->GetTransGUID() || player->IsFlying() ||
             player->HasUnitMovementFlag(MOVEMENTFLAG_CAN_FLY | MOVEMENTFLAG_DISABLE_GRAVITY |
@@ -1064,11 +1470,16 @@ namespace CityLife
         };
         if (!matchesTarget(path.GetActualEndPosition()) || !matchesTarget(path.GetPath().back()))
             return false;
+        Spot const* anchor = resident.Custom == CustomRole::Beggar ? BeggarAnchor(resident) : nullptr;
+        float wanderRadius = anchor ? std::max(_beggarWanderRadius,
+            player->GetExactDist2d(anchor->X, anchor->Y)) + DestinationTolerance : 0.0f;
         for (G3D::Vector3 const& point : path.GetPath())
         {
             float ground = point.z;
             if (!ResolveGround(player, resident.TargetMap, point.x, point.y, ground) ||
-                std::abs(ground - point.z) > DestinationTolerance)
+                std::abs(ground - point.z) > DestinationTolerance ||
+                (anchor && (std::hypot(point.x - anchor->X, point.y - anchor->Y) > wanderRadius ||
+                    std::abs(point.z - anchor->Z) > GroundLayerTolerance)))
                 return false;
         }
 
@@ -1077,7 +1488,7 @@ namespace CityLife
         player->SetStandState(UNIT_STAND_STATE_STAND);
         Movement::MoveSplineInit movement(player);
         movement.MovebyPath(path.GetPath());
-        movement.SetWalk(true);
+        movement.SetWalk(resident.Custom == CustomRole::Beggar ? _beggarWanderWalk : true);
         movement.SetFacing(resident.TargetO);
         int32 const duration = movement.Launch();
         if (duration <= 0)
@@ -1108,7 +1519,9 @@ namespace CityLife
         // Give up at the actual position, never teleport to an unreachable or unvalidated endpoint.
         if (!arrived)
         {
-            resident.SpotId = 0;
+            // A beggar keeps its original square anchor even if an interrupted walk ends elsewhere.
+            if (resident.Custom != CustomRole::Beggar)
+                resident.SpotId = 0;
             resident.TargetMap = player->GetMapId();
             resident.TargetX = player->GetPositionX();
             resident.TargetY = player->GetPositionY();
@@ -1119,6 +1532,8 @@ namespace CityLife
                     resident.Bot.Name, MovementRetryLimit);
         }
         resident.NextMoveAt = GameTimeSeconds() + urand(_relocateMinSeconds, _relocateMaxSeconds);
+        if (resident.Custom == CustomRole::Beggar)
+            resident.NextMoveAt = GameTimeSeconds() + urand(_beggarWanderMinSeconds, _beggarWanderMaxSeconds);
         SetStayPosition(player, resident);
     }
 
@@ -1147,8 +1562,88 @@ namespace CityLife
         }
     }
 
+    void Manager::MaintainCustomResidents()
+    {
+        for (auto resident = _residents.begin(); resident != _residents.end();)
+        {
+            if (resident->Custom == CustomRole::None)
+            {
+                ++resident;
+                continue;
+            }
+            Player* player = FindPlayer(resident->Bot.GuidLow);
+            Hub* hub = FindHub(resident->HubId);
+            bool usable = _enable && hub && hub->Enabled && !IsFishingPaused(*hub) && IsResidentUsable(player) &&
+                sCityLifeCustomActivities.IsActive(resident->Bot.GuidLow) &&
+                !player->GetGroup() &&
+                player->GetLevel() >= hub->MinLevel && player->GetLevel() <= hub->MaxLevel &&
+                sCityLifeCustomActivities.IsSafeCombat(player);
+            if (!usable)
+            {
+                if (ReleaseResident(*resident, _returnBots))
+                    resident = _residents.erase(resident);
+                else
+                    ++resident;
+                continue;
+            }
+            if (!player->IsBeingTeleported())
+                sCityLifeCustomActivities.Update(player, *resident);
+            ++resident;
+        }
+    }
+
+    void Manager::UpdateSocialResidents()
+    {
+        std::vector<uint32> eligible;
+        eligible.reserve(_residents.size());
+        for (Resident const& resident : _residents)
+        {
+            if (resident.Questing || resident.Custom != CustomRole::None || resident.Travelling ||
+                resident.RetryMoveAt != 0)
+                continue;
+            Player* player = FindPlayer(resident.Bot.GuidLow);
+            if (IsResidentUsable(player) && !player->IsInCombat() && !player->isMoving() &&
+                !player->IsBeingTeleported() && !player->IsNonMeleeSpellCast(false))
+                eligible.push_back(resident.Bot.GuidLow);
+        }
+        sCityLifeCustomSocial.Update(eligible);
+    }
+
+    void Manager::OnPlayerBeforeLogout(Player* player)
+    {
+        if (!player)
+            return;
+        uint32 guid = player->GetGUID().GetCounter();
+        auto resident = std::find_if(_residents.begin(), _residents.end(),
+            [guid](Resident const& candidate) { return candidate.Bot.GuidLow == guid; });
+        if (resident != _residents.end() && ReleaseResident(*resident, false))
+            _residents.erase(resident);
+        sCityLifeCustomSocial.Remove(guid);
+        // This also retries an interrupted outfit that never reached an active resident assignment.
+        sCityLifeCustomAppearance.RecoverOnLogin(player);
+    }
+
+    void Manager::Shutdown()
+    {
+        ReleaseAll(false);
+        sCityLifeCustomBotPool.Shutdown();
+    }
+
     void Manager::Update(uint32 diff)
     {
+        // Owned headless sessions need login callbacks/packet/teleport processing every world tick,
+        // including while City Life is disabled and existing sessions are being drained.
+        sCityLifeCustomBotPool.Update();
+        if (_customTimerMs <= diff)
+        {
+            _customTimerMs = IN_MILLISECONDS;
+            sCityLifeCustomActivities.RecoverPending();
+            MaintainCustomResidents();
+            if (_enable && _startupElapsedMs >= _startupDelaySeconds * IN_MILLISECONDS)
+                UpdateSocialResidents();
+        }
+        else
+            _customTimerMs -= diff;
         if (!_enable)
             return;
 
@@ -1180,8 +1675,11 @@ namespace CityLife
             _residents.size(), _maxTotalPopulation, CurrentTimeMultiplier(), _hubs.size());
         for (Hub const& hub : _hubs)
         {
-            handler->PSendSysMessage("{} [{}] level {}-{} base={} target={} current={} spots={} priority={}",
-                hub.Name, TeamName(hub.Team), hub.MinLevel, hub.MaxLevel, hub.ConfiguredPopulation,
+            handler->PSendSysMessage("{} [{} / {}] level {}-{} base={} target={} current={} spots={} priority={}",
+                hub.Name, TeamName(hub.Team), hub.Questing ? "questing" :
+                    (hub.Custom == CustomRole::Fishing ? "fishing" :
+                        (hub.Custom != CustomRole::None ? "custom" : "city")), hub.MinLevel, hub.MaxLevel,
+                hub.ConfiguredPopulation,
                 TargetPopulation(hub), CountResidents(hub.Id), hub.Spots.size(), hub.Priority);
         }
     }
@@ -1306,7 +1804,9 @@ namespace CityLife
             WorldDatabase.DirectExecute("UPDATE city_life_hub SET enabled={} WHERE name='{}'",
                 operation == "enable" ? 1 : 0, name);
             LoadData();
-            handler->PSendSysMessage("CityLife: {} {}.", name, operation == "enable" ? "enabled" : "disabled");
+            handler->PSendSysMessage(
+                "CityLife: {} database flag {}. An explicit config Enable value takes precedence.",
+                name, operation == "enable" ? "enabled" : "disabled");
             return true;
         }
 
@@ -1428,10 +1928,20 @@ namespace CityLife
         }
         if (command == "reload")
         {
+            for (auto resident = _residents.begin(); resident != _residents.end();)
+                if (resident->Custom != CustomRole::None && ReleaseResident(*resident, true))
+                    resident = _residents.erase(resident);
+                else
+                    ++resident;
             if (!_databaseReady || !LoadData())
                 handler->PSendSysMessage("CityLife: reload failed; check the database and server log.");
             else
-                handler->PSendSysMessage("CityLife: hub and spot data reloaded.");
+            {
+                sCityLifeCustomActivities.LoadData();
+                sCityLifeCustomSocial.LoadData();
+                sCityLifeCustomBotPool.SyncHubs(EffectiveHubs());
+                handler->PSendSysMessage("CityLife: hub, spot and ambient chat data reloaded.");
+            }
             return true;
         }
         if (command == "hub" && HandleHubCommand(handler, args))

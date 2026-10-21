@@ -54,7 +54,15 @@ VALUES
 ('Gadgetzan',1,2,35,80,1,8,110),
 ('Goldshire',1,0,1,30,0,8,100),
 ('HonorHold',1,0,58,80,530,6,100),
-('Thrallmar',1,1,58,80,530,6,100)
+('Thrallmar',1,1,58,80,530,6,100),
+('BootyBay',1,2,35,80,0,10,110),
+('Darkshire',1,0,18,80,0,8,105),
+('RebelCamp',1,0,30,80,0,6,105),
+('ValianceKeep',1,0,68,80,571,10,115),
+('WarsongHold',1,1,68,80,571,10,115),
+('RebelCampQuesting',1,0,30,40,0,8,180),
+('FarshireQuesting',1,0,68,72,571,8,180),
+('WarsongHoldQuesting',1,1,68,72,571,8,180)
 ON DUPLICATE KEY UPDATE
 `enabled`=VALUES(`enabled`),`team`=VALUES(`team`),`min_level`=VALUES(`min_level`),
 `max_level`=VALUES(`max_level`),`map_id`=VALUES(`map_id`),
@@ -66,7 +74,8 @@ INNER JOIN `city_life_hub` AS `hub` ON `hub`.`id`=`spot`.`hub_id`
 WHERE `hub`.`name` IN
 ('Stormwind','Orgrimmar','Ironforge','Undercity','Darnassus','ThunderBluff','Exodar','Silvermoon',
  'Shattrath','Dalaran','WintergraspAlliance','WintergraspHorde','Gadgetzan','Goldshire','HonorHold',
- 'Thrallmar');
+ 'Thrallmar','BootyBay','Darkshire','RebelCamp','ValianceKeep','WarsongHold','RebelCampQuesting',
+ 'FarshireQuesting','WarsongHoldQuesting');
 
 -- Coordinates are based on AzerothCore 3.3.5 game_tele and service NPC/gameobject positions.
 -- Use .citylife spot add in game to tune a point for a different navmesh or custom world database.
@@ -158,4 +167,39 @@ INNER JOIN
   UNION ALL SELECT 'Thrallmar','MainSquare','square',156.251,2673.45,85.1587,0.382074,8,130
   UNION ALL SELECT 'Thrallmar','Mailbox','mail',172.726,2623.06,86.8361,3.56983,5,115
   UNION ALL SELECT 'Thrallmar','FlightMaster','flight',233.137,2632.3,88.3007,2.67035,5,85
+
+  -- Town centers: data/sql/base/db_world/game_tele.sql, named locations matching each hub.
+  -- Service/questgiver spots: creature.sql, NPC entries 15677,8123,6790,2409,733,770,25235,25279,26083.
+  -- Small Booty Bay radii keep residents on the selected wooden deck.
+  UNION ALL SELECT 'BootyBay','Harbor','square',-14297.2,530.993,8.77916,3.98863,2,110
+  UNION ALL SELECT 'BootyBay','AuctionHouse','auction',-14398.5,406.925,9.50589,1.51844,2,120
+  UNION ALL SELECT 'BootyBay','Bank','bank',-14421.9,528.898,5.24876,5.14872,2,110
+
+  UNION ALL SELECT 'Darkshire','TownSquare','square',-10573,-1182.51,28.0148,0.309022,4,120
+  UNION ALL SELECT 'Darkshire','Inn','inn',-10516,-1161.21,28.1161,4.03171,2,100
+  UNION ALL SELECT 'Darkshire','FlightMaster','flight',-10513.8,-1258.79,41.5138,4.36332,2,80
+
+  UNION ALL SELECT 'RebelCamp','CampSquare','square',-11322.4,-202.492,75.6362,0.432339,3,120
+  UNION ALL SELECT 'RebelCamp','SergeantYohwa','quest',-11310.4,-205.115,75.3625,2.80998,2,100
+  UNION ALL SELECT 'RebelCamp','CorporalKaleb','quest',-11309.1,-187.431,75.6492,3.78736,2,100
+
+  UNION ALL SELECT 'ValianceKeep','KeepSquare','square',2213.95,5273.15,11.2565,5.89294,4,120
+  UNION ALL SELECT 'ValianceKeep','HildaStoneforge','quest',2336.46,5266.49,7.75584,3.62193,2,100
+
+  UNION ALL SELECT 'WarsongHold','HoldSquare','square',2741.29,6097.16,76.9055,0.731543,4,120
+  UNION ALL SELECT 'WarsongHold','OverlordRazgor','quest',2784.95,6081.02,77.7719,3.49066,2,100
+
+  -- Separate quest populations start at verified outdoor questgivers, not inside mines or buildings.
+  UNION ALL SELECT 'RebelCampQuesting','SergeantYohwa','quest',-11310.4,-205.115,75.3625,2.80998,3,100
+  UNION ALL SELECT 'RebelCampQuesting','CorporalKaleb','quest',-11309.1,-187.431,75.6492,3.78736,3,100
+
+  -- Additional patrol stops use creature.sql GUIDs 117434/116919 (Medic Hawthorn/Blythe).
+  UNION ALL SELECT 'FarshireQuesting','GeraldGreen','quest',2483.26,5215.05,30.2763,0.471239,3,100
+  UNION ALL SELECT 'FarshireQuesting','MedicHawthorn','quest',2248.83,5400.18,1.87424,3.03687,3,100
+  UNION ALL SELECT 'FarshireQuesting','RecruitmentOfficerBlythe','quest',2299.58,5236.22,11.4287,2.77916,3,100
+
+  -- GUIDs 125535/125590: Saurfang offers the quarry introduction; Holgoth offers quest 11606.
+  UNION ALL SELECT 'WarsongHoldQuesting','OverlordRazgor','quest',2784.95,6081.02,77.7719,3.49066,3,100
+  UNION ALL SELECT 'WarsongHoldQuesting','HighOverlordSaurfang','quest',2835.02,6182.44,84.6827,5.82198,3,100
+  UNION ALL SELECT 'WarsongHoldQuesting','QuartermasterHolgoth','quest',2769.98,6073,77.6674,4.41568,3,100
 ) AS `seed` ON `seed`.`hub_name`=`hub`.`name`;

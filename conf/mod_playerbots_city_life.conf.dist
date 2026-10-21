@@ -1,11 +1,48 @@
 ###################################################################################################
-# City Life
+# CITY LIFE - cities, local questing, duels and world PvP
 ###################################################################################################
+# One module, one configuration file: mod_playerbots_city_life.conf.
+# Existing CityLife.* and PvPLife.* option names and defaults are retained.
+# Coordinates, faction data, hotspot weights and chat lines remain in the WORLD database.
+# Use tools/merge_life_config.py to carry your personal settings over from the former two files.
+#
+# Contents:
+#   01  Component switches
+#   02  City population, bot selection, time scaling and behaviour
+#   03  Cities and towns - one Enable and Population pair per location
+#   04  Quest zones - separate Alliance and Horde hubs
+#   05  PvP bot selection and movement
+#   06  Duel zones and real-player challenges
+#   07  World-PvP locations
+#   08  For the Horde / For the Alliance
+#   09  Bot chat and PvP strategies
+#   10  Custom city characters, training and social interactions
+#   11  Fishing Life - waterfront locations and dedicated fishing populations
+#
+# Enable: 1 = on, 0 = off. A configured Enable value takes precedence over the database flag.
+# Normal populations borrow online bots; Custom and Fishing Life have separate CreateMissing settings.
+# Optional city/quest additions are opt-in. Custom and Fishing Life default ON within the shared city cap.
+# Apply the two *_locations.sql additive files once before enabling their new locations.
+# After editing this file, use .reload config or restart worldserver.
+# .citylife reload reloads database hubs/spots only; it does not reread this file.
 
 [worldserver]
 
-# Master switch.
+###################################################################################################
+# 01 - COMPONENT SWITCHES
+###################################################################################################
+# CityLife.Enable controls the shared scheduler for residents, questing, Custom and Fishing Life.
+# Questing additionally needs CityLife.Questing.Enable = 1 in section 04.
+# PvPLife.Enable independently controls all duel, world-PvP and faction-campaign activity.
+
 CityLife.Enable = 1
+PvPLife.Enable = 1
+
+###################################################################################################
+# 02 - CITY POPULATION AND GENERAL BEHAVIOUR
+###################################################################################################
+
+# Startup and diagnostics
 
 # Verbose population and movement logs.
 CityLife.Debug = 0
@@ -16,18 +53,17 @@ CityLife.StartupDelaySeconds = 90
 # Population/behaviour manager interval. Lower values react faster but cost more CPU.
 CityLife.TickSeconds = 10
 
-###################################################################################################
-# Bot selection and safety
-###################################################################################################
+# Bot selection and release
 
 # Read the random-bot account prefix and login delay from mod-playerbots.
 CityLife.Bots.UsePlayerbotConfig = 1
 
-# "auto" uses AiPlayerbot.RandomBotAccountPrefix.
+# "auto" uses Playerbots.RandomBotAccountPrefix.
 CityLife.Bots.AccountPrefix = "auto"
 
 # Optional account-id range. 0/0 disables range filtering.
 CityLife.Bots.AccountMin = 0
+
 CityLife.Bots.AccountMax = 0
 
 CityLife.Bots.QueryLimit = 500
@@ -35,14 +71,34 @@ CityLife.Bots.QueryLimit = 500
 CityLife.Bots.SkipGrouped = 1
 
 # Keep disabled for normal random-playerbot installations. BotActiveAlone may otherwise reject most bots.
+# This bypass applies only to city residents. Questers always require Playerbots full AI activity.
 CityLife.Bots.RespectPlayerbotActivity = 0
 
 # Return released residents to the position from which City Life borrowed them.
 CityLife.Bots.ReturnWhenReleased = 1
 
-###################################################################################################
-# Population controller
-###################################################################################################
+# Population safety limits and online-bot planning
+
+# Required online bots >= Life reservations + simultaneous dungeon/BG bot slots + spare bots.
+# Budget Life bots as unavailable: residents/questers disable normal BG/LFG joining. Manual recruitment
+# can release their Life assignment; returning to the same quest hub is not guaranteed.
+# With Custom + Fishing defaults, targets are morning 286 / day 300 / evening 300 / night 205.
+# Questing and optional city/quest additions default OFF; 16 Custom + 46 Fishing slots default ON.
+# Normal residents + Custom roles + Fishing Life + questers share the 300 cap below;
+# PvP is separate and can request up to 140 more, so budget up to 440 Life bots automatically.
+# This is a default planning peak, not a universal cap: changed settings or GM starts can exceed it.
+# Examples at that peak: 500 online -> 60 free; 1,000 -> 560 free; 2,000 -> 1,560 free.
+# Use 1,000 ONLINE bots as an illustrative budget for the current profile; 2,000 leaves more room
+# to enable additional locations. These are population examples, not measured server requirements.
+# With ALL city/quest hubs, default Custom and Fishing at full scaling, the request is 594.
+# If MaxTotal is at least 594, plus unchanged PvP demand of 140, budget 734 Life bots / 1,266 free at 2,000.
+# Adjust for concurrent demand and server capacity; if the pool varies, plan against MinRandomBots,
+# not MaxRandomBots or offline characters. Include extra Custom/Fishing-managed online bots in the total.
+# No minimum free pool is enforced here; CreateMissing.MaxBots is separate from Playerbots online limits.
+# Especially with leveling bots, keep free bots in EACH faction/BG level bracket and enough eligible
+# level-80 tanks, healers and damage dealers for heroic dungeons (RHC). Low-level bots cannot fill them.
+# One 5-player dungeon with one real player needs 4 eligible bots; BGs need slots on both teams.
+# If too few eligible bots remain, lower hub populations/PvP demand or increase the Playerbots online pool.
 
 # Global safety cap after per-hub settings and time multipliers are applied.
 # Higher-priority hubs from city_life_hub are filled first when this limit is reached.
@@ -51,26 +107,27 @@ CityLife.Population.MaxTotal = 300
 # Gradual arrivals/departures prevent visible mass teleports and reduce update spikes.
 CityLife.Population.MaxChangesPerTick = 3
 
-###################################################################################################
-# Time-of-day scaling (worldserver machine local time)
-###################################################################################################
+# Time-of-day scaling
 
 CityLife.Time.Enable = 1
 
 # Morning 06:00-11:59, day 12:00-17:59, evening 18:00-23:59, night 00:00-05:59.
 # 100 means the full configured hub population.
 CityLife.Time.MorningMultiplierPct = 60
+
 CityLife.Time.DayMultiplierPct = 80
+
 CityLife.Time.EveningMultiplierPct = 100
+
 CityLife.Time.NightMultiplierPct = 25
 
-###################################################################################################
-# Visual behaviour
-###################################################################################################
+# Resident movement and social behaviour
 
 # Move residents between the hub's AH/bank/mail/flight/square spots occasionally.
 CityLife.Behaviour.Relocate = 1
+
 CityLife.Behaviour.RelocateMinSeconds = 180
+
 CityLife.Behaviour.RelocateMaxSeconds = 600
 
 # Drift-recovery distance in yards after arrival; normal relocation is never a leash violation.
@@ -78,8 +135,11 @@ CityLife.Behaviour.RelocateMaxSeconds = 600
 CityLife.Behaviour.LeashRadius = 35
 
 CityLife.Behaviour.Emotes = 1
+
 CityLife.Behaviour.EmoteChancePct = 35
+
 CityLife.Behaviour.EmoteMinSeconds = 120
+
 CityLife.Behaviour.EmoteMaxSeconds = 360
 
 # Give AH and bank spots in the listed hubs more residents than other hotspots.
@@ -89,74 +149,1143 @@ CityLife.Behaviour.ServiceSpotWeightMultiplierPct = 250
 # Percentage of residents initially assigned to those service spots that remain stationary.
 # They may still emote and defend themselves if attacked.
 CityLife.Behaviour.StaticServiceChancePct = 80
+
 CityLife.Behaviour.StaticServiceHubs = "Stormwind,Orgrimmar"
+
 CityLife.Behaviour.StaticServiceCategories = "auction,bank"
+
+# Resident strategies
 
 # City bots stay defensive if attacked but do not grind, travel or wander away on their own.
 # City Life suppresses competing non-combat movement (including stay's return action) while reserved.
 CityLife.Strategies.NonCombat = "+stay,-follow,-passive,-grind,-rpg,-travel,-duel,-pvp"
 
-###################################################################################################
-# Seed hub populations
-###################################################################################################
 
-# Every database hub also supports:
-#   CityLife.Hub.<HubName>.Enable
-#   CityLife.Hub.<HubName>.Population
-#   CityLife.Hub.<HubName>.TimeScaling
-#   CityLife.Hub.<HubName>.ResidenceSeconds (0 keeps the same residents indefinitely)
-# Custom database hubs use their database default when no config key exists.
+###################################################################################################
+# 03 - CITIES AND TOWNS
+###################################################################################################
+# Each block controls city residents only; questers have independent blocks in section 04.
+# Existing populations are unchanged. New towns are disabled until you enable them.
+# Every hub also accepts TimeScaling and ResidenceSeconds, as demonstrated by Wintergrasp.
+# Duskwood residents use the Darkshire hub. The Horde counterpart to Valiance Keep is Warsong Hold.
 
+# --- Faction capitals ---
+
+# Stormwind
 CityLife.Hub.Stormwind.Enable = 1
 CityLife.Hub.Stormwind.Population = 25
 
+# Orgrimmar
 CityLife.Hub.Orgrimmar.Enable = 1
 CityLife.Hub.Orgrimmar.Population = 25
 
+# Ironforge
 CityLife.Hub.Ironforge.Enable = 1
 CityLife.Hub.Ironforge.Population = 18
 
+# Undercity
 CityLife.Hub.Undercity.Enable = 1
 CityLife.Hub.Undercity.Population = 18
 
+# Darnassus
 CityLife.Hub.Darnassus.Enable = 1
 CityLife.Hub.Darnassus.Population = 10
 
+# ThunderBluff
 CityLife.Hub.ThunderBluff.Enable = 1
 CityLife.Hub.ThunderBluff.Population = 10
 
+# Exodar
 CityLife.Hub.Exodar.Enable = 1
 CityLife.Hub.Exodar.Population = 5
 
+# Silvermoon
 CityLife.Hub.Silvermoon.Enable = 1
 CityLife.Hub.Silvermoon.Population = 8
 
+# --- Shared expansion capitals ---
+
+# Shattrath
 CityLife.Hub.Shattrath.Enable = 1
 CityLife.Hub.Shattrath.Population = 20
 
+# Dalaran
 CityLife.Hub.Dalaran.Enable = 1
 CityLife.Hub.Dalaran.Population = 25
 
-# Keep 40 bots from each faction at their separate Wintergrasp starting camps. They ignore the
-# time-of-day population multiplier and rotate after three hours.
+# --- Eastern Kingdoms towns ---
+
+# Goldshire
+CityLife.Hub.Goldshire.Enable = 1
+CityLife.Hub.Goldshire.Population = 8
+
+# BootyBay
+CityLife.Hub.BootyBay.Enable = 1
+CityLife.Hub.BootyBay.Population = 10
+
+# Darkshire / Duskwood
+CityLife.Hub.Darkshire.Enable = 1
+CityLife.Hub.Darkshire.Population = 8
+
+# Rebel Camp / Stranglethorn Vale
+CityLife.Hub.RebelCamp.Enable = 1
+CityLife.Hub.RebelCamp.Population = 6
+
+# Lakeshire
+CityLife.Hub.Lakeshire.Enable = 0
+CityLife.Hub.Lakeshire.Population = 6
+
+# SentinelHill
+CityLife.Hub.SentinelHill.Enable = 0
+CityLife.Hub.SentinelHill.Population = 6
+
+# MenethilHarbor
+CityLife.Hub.MenethilHarbor.Enable = 0
+CityLife.Hub.MenethilHarbor.Population = 6
+
+# Brill
+CityLife.Hub.Brill.Enable = 0
+CityLife.Hub.Brill.Population = 6
+
+# Stonard
+CityLife.Hub.Stonard.Enable = 0
+CityLife.Hub.Stonard.Population = 6
+
+# LightsHopeChapel
+CityLife.Hub.LightsHopeChapel.Enable = 0
+CityLife.Hub.LightsHopeChapel.Population = 6
+
+# --- Kalimdor towns ---
+
+# Gadgetzan
+CityLife.Hub.Gadgetzan.Enable = 1
+CityLife.Hub.Gadgetzan.Population = 8
+
+# Theramore
+CityLife.Hub.Theramore.Enable = 0
+CityLife.Hub.Theramore.Population = 8
+
+# Auberdine
+CityLife.Hub.Auberdine.Enable = 0
+CityLife.Hub.Auberdine.Population = 6
+
+# Crossroads
+CityLife.Hub.Crossroads.Enable = 0
+CityLife.Hub.Crossroads.Population = 8
+
+# RazorHill
+CityLife.Hub.RazorHill.Enable = 0
+CityLife.Hub.RazorHill.Population = 6
+
+# CampTaurajo
+CityLife.Hub.CampTaurajo.Enable = 0
+CityLife.Hub.CampTaurajo.Population = 6
+
+# Ratchet
+CityLife.Hub.Ratchet.Enable = 0
+CityLife.Hub.Ratchet.Population = 8
+
+# Everlook
+CityLife.Hub.Everlook.Enable = 0
+CityLife.Hub.Everlook.Population = 6
+
+# CenarionHold
+CityLife.Hub.CenarionHold.Enable = 0
+CityLife.Hub.CenarionHold.Population = 6
+
+# --- Outland towns ---
+
+# HonorHold
+CityLife.Hub.HonorHold.Enable = 1
+CityLife.Hub.HonorHold.Population = 6
+
+# Thrallmar
+CityLife.Hub.Thrallmar.Enable = 1
+CityLife.Hub.Thrallmar.Population = 6
+
+# --- Northrend towns ---
+
+# Valiance Keep / Alliance
+CityLife.Hub.ValianceKeep.Enable = 1
+CityLife.Hub.ValianceKeep.Population = 10
+
+# Warsong Hold / Horde
+CityLife.Hub.WarsongHold.Enable = 1
+CityLife.Hub.WarsongHold.Population = 10
+
+# --- Wintergrasp faction camps ---
+
+# WintergraspAlliance
 CityLife.Hub.WintergraspAlliance.Enable = 1
 CityLife.Hub.WintergraspAlliance.Population = 40
 CityLife.Hub.WintergraspAlliance.TimeScaling = 0
 CityLife.Hub.WintergraspAlliance.ResidenceSeconds = 10800
 
+# WintergraspHorde
 CityLife.Hub.WintergraspHorde.Enable = 1
 CityLife.Hub.WintergraspHorde.Population = 40
 CityLife.Hub.WintergraspHorde.TimeScaling = 0
 CityLife.Hub.WintergraspHorde.ResidenceSeconds = 10800
 
-CityLife.Hub.Gadgetzan.Enable = 1
-CityLife.Hub.Gadgetzan.Population = 8
 
-CityLife.Hub.Goldshire.Enable = 1
-CityLife.Hub.Goldshire.Population = 8
+###################################################################################################
+# 04 - QUEST ZONES
+###################################################################################################
+# The global questing default remains OFF. Set the following switch to 1 to use quest hubs.
+# Also enable each desired hub below; every faction has its own population and start location.
+# Questers really accept, perform and turn in quests through Playerbots.
+# They do not use resident stay/leash/emote behaviour, and always require full Playerbots AI activity.
+# QuestZoneId is a zone ID; QuestRadius is yards around the first SQL hotspot.
+# Quest givers, objectives and reward points must fit that zone and radius.
+# QuestIdleSeconds measures actual quest progress; ResidenceSeconds rotates participants.
+# Questers share CityLife.Population.MaxTotal with residents, independently of the PvP population.
 
-CityLife.Hub.HonorHold.Enable = 1
-CityLife.Hub.HonorHold.Population = 6
+CityLife.Questing.Enable = 0
 
-CityLife.Hub.Thrallmar.Enable = 1
-CityLife.Hub.Thrallmar.Population = 6
+# --- Stranglethorn Vale ---
+
+# Stranglethorn Vale / RebelCamp - Alliance (lvl 30-40)
+CityLife.Hub.RebelCampQuesting.Enable = 1
+CityLife.Hub.RebelCampQuesting.Population = 8
+CityLife.Hub.RebelCampQuesting.Questing = 1
+CityLife.Hub.RebelCampQuesting.QuestZoneId = 33
+CityLife.Hub.RebelCampQuesting.QuestRadius = 1200
+CityLife.Hub.RebelCampQuesting.QuestIdleSeconds = 300
+CityLife.Hub.RebelCampQuesting.MinLevel = 30
+CityLife.Hub.RebelCampQuesting.MaxLevel = 40
+CityLife.Hub.RebelCampQuesting.TimeScaling = 0
+CityLife.Hub.RebelCampQuesting.ResidenceSeconds = 3600
+
+# Stranglethorn Vale / Gromgol - Horde (lvl 30-40)
+CityLife.Hub.GromgolQuesting.Enable = 0
+CityLife.Hub.GromgolQuesting.Population = 6
+CityLife.Hub.GromgolQuesting.Questing = 1
+CityLife.Hub.GromgolQuesting.QuestZoneId = 33
+CityLife.Hub.GromgolQuesting.QuestRadius = 900
+CityLife.Hub.GromgolQuesting.QuestIdleSeconds = 300
+CityLife.Hub.GromgolQuesting.MinLevel = 30
+CityLife.Hub.GromgolQuesting.MaxLevel = 40
+CityLife.Hub.GromgolQuesting.TimeScaling = 0
+CityLife.Hub.GromgolQuesting.ResidenceSeconds = 3600
+
+# --- Borean Tundra ---
+
+# Borean Tundra / Farshire - Alliance (lvl 68-72)
+CityLife.Hub.FarshireQuesting.Enable = 1
+CityLife.Hub.FarshireQuesting.Population = 8
+CityLife.Hub.FarshireQuesting.Questing = 1
+CityLife.Hub.FarshireQuesting.QuestZoneId = 3537
+CityLife.Hub.FarshireQuesting.QuestRadius = 900
+CityLife.Hub.FarshireQuesting.QuestIdleSeconds = 300
+CityLife.Hub.FarshireQuesting.MinLevel = 68
+CityLife.Hub.FarshireQuesting.MaxLevel = 72
+CityLife.Hub.FarshireQuesting.TimeScaling = 0
+CityLife.Hub.FarshireQuesting.ResidenceSeconds = 3600
+
+# Borean Tundra / WarsongHold - Horde (lvl 68-72)
+CityLife.Hub.WarsongHoldQuesting.Enable = 1
+CityLife.Hub.WarsongHoldQuesting.Population = 8
+CityLife.Hub.WarsongHoldQuesting.Questing = 1
+CityLife.Hub.WarsongHoldQuesting.QuestZoneId = 3537
+CityLife.Hub.WarsongHoldQuesting.QuestRadius = 1000
+CityLife.Hub.WarsongHoldQuesting.QuestIdleSeconds = 300
+CityLife.Hub.WarsongHoldQuesting.MinLevel = 68
+CityLife.Hub.WarsongHoldQuesting.MaxLevel = 72
+CityLife.Hub.WarsongHoldQuesting.TimeScaling = 0
+CityLife.Hub.WarsongHoldQuesting.ResidenceSeconds = 3600
+
+# --- Hillsbrad Foothills ---
+
+# Hillsbrad Foothills / Southshore - Alliance (lvl 25-35)
+CityLife.Hub.SouthshoreQuesting.Enable = 0
+CityLife.Hub.SouthshoreQuesting.Population = 6
+CityLife.Hub.SouthshoreQuesting.Questing = 1
+CityLife.Hub.SouthshoreQuesting.QuestZoneId = 267
+CityLife.Hub.SouthshoreQuesting.QuestRadius = 800
+CityLife.Hub.SouthshoreQuesting.QuestIdleSeconds = 300
+CityLife.Hub.SouthshoreQuesting.MinLevel = 25
+CityLife.Hub.SouthshoreQuesting.MaxLevel = 35
+CityLife.Hub.SouthshoreQuesting.TimeScaling = 0
+CityLife.Hub.SouthshoreQuesting.ResidenceSeconds = 3600
+
+# Hillsbrad Foothills / TarrenMill - Horde (lvl 25-35)
+CityLife.Hub.TarrenMillQuesting.Enable = 0
+CityLife.Hub.TarrenMillQuesting.Population = 6
+CityLife.Hub.TarrenMillQuesting.Questing = 1
+CityLife.Hub.TarrenMillQuesting.QuestZoneId = 267
+CityLife.Hub.TarrenMillQuesting.QuestRadius = 700
+CityLife.Hub.TarrenMillQuesting.QuestIdleSeconds = 300
+CityLife.Hub.TarrenMillQuesting.MinLevel = 25
+CityLife.Hub.TarrenMillQuesting.MaxLevel = 35
+CityLife.Hub.TarrenMillQuesting.TimeScaling = 0
+CityLife.Hub.TarrenMillQuesting.ResidenceSeconds = 3600
+
+# --- Arathi Highlands ---
+
+# Arathi Highlands / RefugePointe - Alliance (lvl 30-40)
+CityLife.Hub.RefugePointeQuesting.Enable = 0
+CityLife.Hub.RefugePointeQuesting.Population = 6
+CityLife.Hub.RefugePointeQuesting.Questing = 1
+CityLife.Hub.RefugePointeQuesting.QuestZoneId = 45
+CityLife.Hub.RefugePointeQuesting.QuestRadius = 1000
+CityLife.Hub.RefugePointeQuesting.QuestIdleSeconds = 300
+CityLife.Hub.RefugePointeQuesting.MinLevel = 30
+CityLife.Hub.RefugePointeQuesting.MaxLevel = 40
+CityLife.Hub.RefugePointeQuesting.TimeScaling = 0
+CityLife.Hub.RefugePointeQuesting.ResidenceSeconds = 3600
+
+# Arathi Highlands / Hammerfall - Horde (lvl 30-40)
+CityLife.Hub.HammerfallQuesting.Enable = 0
+CityLife.Hub.HammerfallQuesting.Population = 6
+CityLife.Hub.HammerfallQuesting.Questing = 1
+CityLife.Hub.HammerfallQuesting.QuestZoneId = 45
+CityLife.Hub.HammerfallQuesting.QuestRadius = 1800
+CityLife.Hub.HammerfallQuesting.QuestIdleSeconds = 300
+CityLife.Hub.HammerfallQuesting.MinLevel = 30
+CityLife.Hub.HammerfallQuesting.MaxLevel = 40
+CityLife.Hub.HammerfallQuesting.TimeScaling = 0
+CityLife.Hub.HammerfallQuesting.ResidenceSeconds = 3600
+
+# --- Ashenvale ---
+
+# Ashenvale / Astranaar - Alliance (lvl 20-30)
+CityLife.Hub.AstranaarQuesting.Enable = 0
+CityLife.Hub.AstranaarQuesting.Population = 6
+CityLife.Hub.AstranaarQuesting.Questing = 1
+CityLife.Hub.AstranaarQuesting.QuestZoneId = 331
+CityLife.Hub.AstranaarQuesting.QuestRadius = 2300
+CityLife.Hub.AstranaarQuesting.QuestIdleSeconds = 300
+CityLife.Hub.AstranaarQuesting.MinLevel = 20
+CityLife.Hub.AstranaarQuesting.MaxLevel = 30
+CityLife.Hub.AstranaarQuesting.TimeScaling = 0
+CityLife.Hub.AstranaarQuesting.ResidenceSeconds = 3600
+
+# Ashenvale / SplintertreePost - Horde (lvl 20-30)
+CityLife.Hub.SplintertreePostQuesting.Enable = 0
+CityLife.Hub.SplintertreePostQuesting.Population = 6
+CityLife.Hub.SplintertreePostQuesting.Questing = 1
+CityLife.Hub.SplintertreePostQuesting.QuestZoneId = 331
+CityLife.Hub.SplintertreePostQuesting.QuestRadius = 1000
+CityLife.Hub.SplintertreePostQuesting.QuestIdleSeconds = 300
+CityLife.Hub.SplintertreePostQuesting.MinLevel = 20
+CityLife.Hub.SplintertreePostQuesting.MaxLevel = 30
+CityLife.Hub.SplintertreePostQuesting.TimeScaling = 0
+CityLife.Hub.SplintertreePostQuesting.ResidenceSeconds = 3600
+
+# --- Hellfire Peninsula ---
+
+# Hellfire Peninsula / HonorHold - Alliance (lvl 58-63)
+CityLife.Hub.HonorHoldQuesting.Enable = 0
+CityLife.Hub.HonorHoldQuesting.Population = 6
+CityLife.Hub.HonorHoldQuesting.Questing = 1
+CityLife.Hub.HonorHoldQuesting.QuestZoneId = 3483
+CityLife.Hub.HonorHoldQuesting.QuestRadius = 1100
+CityLife.Hub.HonorHoldQuesting.QuestIdleSeconds = 300
+CityLife.Hub.HonorHoldQuesting.MinLevel = 58
+CityLife.Hub.HonorHoldQuesting.MaxLevel = 63
+CityLife.Hub.HonorHoldQuesting.TimeScaling = 0
+CityLife.Hub.HonorHoldQuesting.ResidenceSeconds = 3600
+
+# Hellfire Peninsula / Thrallmar - Horde (lvl 58-63)
+CityLife.Hub.ThrallmarQuesting.Enable = 0
+CityLife.Hub.ThrallmarQuesting.Population = 6
+CityLife.Hub.ThrallmarQuesting.Questing = 1
+CityLife.Hub.ThrallmarQuesting.QuestZoneId = 3483
+CityLife.Hub.ThrallmarQuesting.QuestRadius = 1000
+CityLife.Hub.ThrallmarQuesting.QuestIdleSeconds = 300
+CityLife.Hub.ThrallmarQuesting.MinLevel = 58
+CityLife.Hub.ThrallmarQuesting.MaxLevel = 63
+CityLife.Hub.ThrallmarQuesting.TimeScaling = 0
+CityLife.Hub.ThrallmarQuesting.ResidenceSeconds = 3600
+
+# --- Nagrand ---
+
+# Nagrand / Telaar - Alliance (lvl 64-68)
+CityLife.Hub.TelaarQuesting.Enable = 0
+CityLife.Hub.TelaarQuesting.Population = 6
+CityLife.Hub.TelaarQuesting.Questing = 1
+CityLife.Hub.TelaarQuesting.QuestZoneId = 3518
+CityLife.Hub.TelaarQuesting.QuestRadius = 700
+CityLife.Hub.TelaarQuesting.QuestIdleSeconds = 300
+CityLife.Hub.TelaarQuesting.MinLevel = 64
+CityLife.Hub.TelaarQuesting.MaxLevel = 68
+CityLife.Hub.TelaarQuesting.TimeScaling = 0
+CityLife.Hub.TelaarQuesting.ResidenceSeconds = 3600
+
+# Nagrand / Garadar - Horde (lvl 64-68)
+CityLife.Hub.GaradarQuesting.Enable = 0
+CityLife.Hub.GaradarQuesting.Population = 6
+CityLife.Hub.GaradarQuesting.Questing = 1
+CityLife.Hub.GaradarQuesting.QuestZoneId = 3518
+CityLife.Hub.GaradarQuesting.QuestRadius = 1500
+CityLife.Hub.GaradarQuesting.QuestIdleSeconds = 300
+CityLife.Hub.GaradarQuesting.MinLevel = 64
+CityLife.Hub.GaradarQuesting.MaxLevel = 68
+CityLife.Hub.GaradarQuesting.TimeScaling = 0
+CityLife.Hub.GaradarQuesting.ResidenceSeconds = 3600
+
+# --- Terokkar Forest ---
+
+# Terokkar Forest / AllerianStronghold - Alliance (lvl 62-66)
+CityLife.Hub.AllerianStrongholdQuesting.Enable = 0
+CityLife.Hub.AllerianStrongholdQuesting.Population = 6
+CityLife.Hub.AllerianStrongholdQuesting.Questing = 1
+CityLife.Hub.AllerianStrongholdQuesting.QuestZoneId = 3519
+CityLife.Hub.AllerianStrongholdQuesting.QuestRadius = 900
+CityLife.Hub.AllerianStrongholdQuesting.QuestIdleSeconds = 300
+CityLife.Hub.AllerianStrongholdQuesting.MinLevel = 62
+CityLife.Hub.AllerianStrongholdQuesting.MaxLevel = 66
+CityLife.Hub.AllerianStrongholdQuesting.TimeScaling = 0
+CityLife.Hub.AllerianStrongholdQuesting.ResidenceSeconds = 3600
+
+# Terokkar Forest / StonebreakerHold - Horde (lvl 62-66)
+CityLife.Hub.StonebreakerHoldQuesting.Enable = 0
+CityLife.Hub.StonebreakerHoldQuesting.Population = 6
+CityLife.Hub.StonebreakerHoldQuesting.Questing = 1
+CityLife.Hub.StonebreakerHoldQuesting.QuestZoneId = 3519
+CityLife.Hub.StonebreakerHoldQuesting.QuestRadius = 1400
+CityLife.Hub.StonebreakerHoldQuesting.QuestIdleSeconds = 300
+CityLife.Hub.StonebreakerHoldQuesting.MinLevel = 62
+CityLife.Hub.StonebreakerHoldQuesting.MaxLevel = 66
+CityLife.Hub.StonebreakerHoldQuesting.TimeScaling = 0
+CityLife.Hub.StonebreakerHoldQuesting.ResidenceSeconds = 3600
+
+# --- Howling Fjord ---
+
+# Howling Fjord / Valgarde - Alliance (lvl 68-72)
+CityLife.Hub.ValgardeQuesting.Enable = 0
+CityLife.Hub.ValgardeQuesting.Population = 6
+CityLife.Hub.ValgardeQuesting.Questing = 1
+CityLife.Hub.ValgardeQuesting.QuestZoneId = 495
+CityLife.Hub.ValgardeQuesting.QuestRadius = 700
+CityLife.Hub.ValgardeQuesting.QuestIdleSeconds = 300
+CityLife.Hub.ValgardeQuesting.MinLevel = 68
+CityLife.Hub.ValgardeQuesting.MaxLevel = 72
+CityLife.Hub.ValgardeQuesting.TimeScaling = 0
+CityLife.Hub.ValgardeQuesting.ResidenceSeconds = 3600
+
+# Howling Fjord / VengeanceLanding - Horde (lvl 68-72)
+CityLife.Hub.VengeanceLandingQuesting.Enable = 0
+CityLife.Hub.VengeanceLandingQuesting.Population = 6
+CityLife.Hub.VengeanceLandingQuesting.Questing = 1
+CityLife.Hub.VengeanceLandingQuesting.QuestZoneId = 495
+CityLife.Hub.VengeanceLandingQuesting.QuestRadius = 700
+CityLife.Hub.VengeanceLandingQuesting.QuestIdleSeconds = 300
+CityLife.Hub.VengeanceLandingQuesting.MinLevel = 68
+CityLife.Hub.VengeanceLandingQuesting.MaxLevel = 72
+CityLife.Hub.VengeanceLandingQuesting.TimeScaling = 0
+CityLife.Hub.VengeanceLandingQuesting.ResidenceSeconds = 3600
+
+# --- Grizzly Hills ---
+
+# Grizzly Hills / AmberpineLodge - Alliance (lvl 73-76)
+CityLife.Hub.AmberpineLodgeQuesting.Enable = 0
+CityLife.Hub.AmberpineLodgeQuesting.Population = 6
+CityLife.Hub.AmberpineLodgeQuesting.Questing = 1
+CityLife.Hub.AmberpineLodgeQuesting.QuestZoneId = 394
+CityLife.Hub.AmberpineLodgeQuesting.QuestRadius = 1200
+CityLife.Hub.AmberpineLodgeQuesting.QuestIdleSeconds = 300
+CityLife.Hub.AmberpineLodgeQuesting.MinLevel = 73
+CityLife.Hub.AmberpineLodgeQuesting.MaxLevel = 76
+CityLife.Hub.AmberpineLodgeQuesting.TimeScaling = 0
+CityLife.Hub.AmberpineLodgeQuesting.ResidenceSeconds = 3600
+
+# Grizzly Hills / ConquestHold - Horde (lvl 73-76)
+CityLife.Hub.ConquestHoldQuesting.Enable = 0
+CityLife.Hub.ConquestHoldQuesting.Population = 6
+CityLife.Hub.ConquestHoldQuesting.Questing = 1
+CityLife.Hub.ConquestHoldQuesting.QuestZoneId = 394
+CityLife.Hub.ConquestHoldQuesting.QuestRadius = 1100
+CityLife.Hub.ConquestHoldQuesting.QuestIdleSeconds = 300
+CityLife.Hub.ConquestHoldQuesting.MinLevel = 73
+CityLife.Hub.ConquestHoldQuesting.MaxLevel = 76
+CityLife.Hub.ConquestHoldQuesting.TimeScaling = 0
+CityLife.Hub.ConquestHoldQuesting.ResidenceSeconds = 3600
+
+
+###################################################################################################
+# 05 - PVP BOT SELECTION AND MOVEMENT
+###################################################################################################
+# PvP settings use the same file and keep their original PvPLife.* names.
+# PvPLife.Enable in section 01 is ON by default.
+
+# Verbose server log output.
+PvPLife.Debug = 0
+
+# Server-wide system messages when activities start/end.
+# Recommended OFF for a more natural/player-like world.
+PvPLife.Announce = 0
+
+# Delay after worldserver startup before the module becomes active.
+PvPLife.StartupDelaySeconds = 90
+
+# Manager logic interval.
+PvPLife.TickSeconds = 20
+
+# Read the random-bot account prefix from mod-playerbots when possible.
+PvPLife.Bots.UsePlayerbotConfig = 1
+
+# "auto" = use mod-playerbots prefix. Set an explicit prefix only if needed.
+PvPLife.Bots.AccountPrefix = "auto"
+
+# Optional account-id range. 0/0 disables range filtering.
+PvPLife.Bots.AccountMin = 0
+
+PvPLife.Bots.AccountMax = 0
+
+PvPLife.Bots.QueryLimit = 500
+
+# Avoid stealing bots that are currently grouped for player/raid/dungeon activity.
+PvPLife.Bots.SkipGrouped = 1
+
+# When enabled, only bots currently allowed by Playerbots' activity throttle are eligible.
+# Keep disabled for PvP Life: otherwise BotActiveAlone can silently reject most or all random bots.
+PvPLife.Bots.RespectPlayerbotActivity = 0
+
+# Start an activity with fewer bots than the randomly requested amount when necessary.
+# Both sides must still contain at least MinimumPerSide eligible bots.
+PvPLife.Bots.AllowPartialTeams = 1
+
+PvPLife.Bots.MinimumPerSide = 1
+
+# Return participating bots to their original location when an activity finishes.
+PvPLife.Bots.ReturnAfterActivity = 1
+
+# After the initial rally placement, use MovePoint toward the fight area.
+PvPLife.Movement.UseMovePoint = 1
+
+# Random position offset in yards to prevent stacking.
+PvPLife.Movement.PositionJitter = 10
+
+# Spread bot arrivals over a random delay instead of moving everyone simultaneously.
+PvPLife.Movement.ArrivalStaggerMinSeconds = 2
+
+PvPLife.Movement.ArrivalStaggerMaxSeconds = 12
+
+PvPLife.Movement.MoveAfterArrivalMinSeconds = 6
+
+PvPLife.Movement.MoveAfterArrivalMaxSeconds = 20
+
+# Hard safety cap per faction/side for one activity.
+# This does not create more bots by itself; it only caps the per-zone population settings below.
+PvPLife.Bots.MaxPerSide = 100
+
+
+###################################################################################################
+# 06 - DUEL ZONES AND REAL-PLAYER CHALLENGES
+###################################################################################################
+
+PvPLife.Duel.Enable = 1
+
+# Keep enabled duel zones populated almost continuously.
+PvPLife.Duel.AlwaysActive = 1
+
+# WotLK duel request spell.
+PvPLife.Duel.SpellId = 7266
+
+# Maximum number of bot-vs-bot duel pairs scheduled per duel-zone activation.
+PvPLife.Duel.PairLimit = 12
+
+PvPLife.Duel.PairDelayMinSeconds = 5
+
+PvPLife.Duel.PairDelayMaxSeconds = 18
+
+# Keep duel-zone bots close to the configured rally/target midpoint.
+PvPLife.Duel.LeashRadius = 40
+
+# How often idle duel participants are anchored to their assigned position.
+# Active duels and combat movement are never interrupted by this guard.
+PvPLife.Duel.GuardIntervalMs = 1000
+
+# Bots may challenge nearby REAL players.
+PvPLife.Duel.ChallengeRealPlayers = 1
+
+PvPLife.Duel.PlayerChallengeChance = 25
+
+PvPLife.Duel.PlayerScanRadius = 55
+
+# Critical fairness check. Example: with 5, a level 10 bot can only challenge level 5-15 players.
+PvPLife.Duel.MaxLevelDifference = 5
+
+# Anti-spam: the same player / same bot cannot be repeatedly challenged.
+PvPLife.Duel.PlayerChallengeCooldownSeconds = 900
+
+PvPLife.Duel.BotChallengeCooldownSeconds = 180
+
+# Time before the same bot can be paired for another bot-vs-bot duel.
+PvPLife.Duel.BotVsBotCooldownSeconds = 45
+
+# Maximum level difference for bot-vs-bot duel pairing.
+PvPLife.Duel.BotVsBotMaxLevelDifference = 5
+
+# StormwindDuel
+PvPLife.Zone.StormwindDuel.Enable = 1
+PvPLife.Zone.StormwindDuel.MinPopulation = 8
+PvPLife.Zone.StormwindDuel.MaxPopulation = 16
+
+# OrgrimmarDuel
+PvPLife.Zone.OrgrimmarDuel.Enable = 1
+PvPLife.Zone.OrgrimmarDuel.MinPopulation = 8
+PvPLife.Zone.OrgrimmarDuel.MaxPopulation = 16
+
+
+###################################################################################################
+# 07 - WORLD-PVP LOCATIONS
+###################################################################################################
+# MinPopulation and MaxPopulation are TOTAL bots, both sides combined.
+# SQL defines the faction ratio, level band, map, separate rally/target coordinates and duration.
+# An explicit Enable value below controls automatic activation, including SQL-disabled locations.
+# GM .pvplife start can force an individual disabled zone while the PvP master switch is enabled.
+# New sites provide skirmishes; automated objective capture/bombing is not added.
+
+# Keep world PvP alive somewhere at practically all times.
+PvPLife.World.AlwaysActive = 1
+
+# Number of simultaneously active normal world-PvP hotspots.
+PvPLife.World.MinActiveHotspots = 1
+
+PvPLife.World.MaxActiveHotspots = 3
+
+# Chance each manager tick to start an additional normal hotspot if below MaxActiveHotspots.
+PvPLife.World.RandomStartChance = 35
+
+# STV_Nesingwary
+PvPLife.Zone.STV_Nesingwary.Enable = 1
+PvPLife.Zone.STV_Nesingwary.MinPopulation = 10
+PvPLife.Zone.STV_Nesingwary.MaxPopulation = 20
+
+# STV_Gurubashi
+PvPLife.Zone.STV_Gurubashi.Enable = 1
+PvPLife.Zone.STV_Gurubashi.MinPopulation = 12
+PvPLife.Zone.STV_Gurubashi.MaxPopulation = 24
+
+# Tanaris_Gadgetzan
+PvPLife.Zone.Tanaris_Gadgetzan.Enable = 1
+PvPLife.Zone.Tanaris_Gadgetzan.MinPopulation = 10
+PvPLife.Zone.Tanaris_Gadgetzan.MaxPopulation = 20
+
+# DarkPortal_Azeroth
+PvPLife.Zone.DarkPortal_Azeroth.Enable = 1
+PvPLife.Zone.DarkPortal_Azeroth.MinPopulation = 12
+PvPLife.Zone.DarkPortal_Azeroth.MaxPopulation = 28
+
+# DarkPortal_Outland
+PvPLife.Zone.DarkPortal_Outland.Enable = 1
+PvPLife.Zone.DarkPortal_Outland.MinPopulation = 12
+PvPLife.Zone.DarkPortal_Outland.MaxPopulation = 28
+
+# Shattrath_Outskirts
+PvPLife.Zone.Shattrath_Outskirts.Enable = 1
+PvPLife.Zone.Shattrath_Outskirts.MinPopulation = 10
+PvPLife.Zone.Shattrath_Outskirts.MaxPopulation = 24
+
+# K3_StormPeaks
+PvPLife.Zone.K3_StormPeaks.Enable = 1
+PvPLife.Zone.K3_StormPeaks.MinPopulation = 10
+PvPLife.Zone.K3_StormPeaks.MaxPopulation = 24
+
+# Wintergrasp
+PvPLife.Zone.Wintergrasp.Enable = 1
+PvPLife.Zone.Wintergrasp.MinPopulation = 10
+PvPLife.Zone.Wintergrasp.MaxPopulation = 24
+
+# Goldshire_Roaming
+PvPLife.Zone.Goldshire_Roaming.Enable = 1
+PvPLife.Zone.Goldshire_Roaming.MinPopulation = 4
+PvPLife.Zone.Goldshire_Roaming.MaxPopulation = 10
+
+# Durotar_Roaming
+PvPLife.Zone.Durotar_Roaming.Enable = 1
+PvPLife.Zone.Durotar_Roaming.MinPopulation = 4
+PvPLife.Zone.Durotar_Roaming.MaxPopulation = 10
+
+# Orgrimmar_Zeppelin
+PvPLife.Zone.Orgrimmar_Zeppelin.Enable = 0
+PvPLife.Zone.Orgrimmar_Zeppelin.MinPopulation = 4
+PvPLife.Zone.Orgrimmar_Zeppelin.MaxPopulation = 12
+
+# Southshore_TarrenMill
+PvPLife.Zone.Southshore_TarrenMill.Enable = 0
+PvPLife.Zone.Southshore_TarrenMill.MinPopulation = 10
+PvPLife.Zone.Southshore_TarrenMill.MaxPopulation = 20
+
+# Halaa
+PvPLife.Zone.Halaa.Enable = 0
+PvPLife.Zone.Halaa.MinPopulation = 10
+PvPLife.Zone.Halaa.MaxPopulation = 24
+
+# BlackrockMountain
+PvPLife.Zone.BlackrockMountain.Enable = 0
+PvPLife.Zone.BlackrockMountain.MinPopulation = 8
+PvPLife.Zone.BlackrockMountain.MaxPopulation = 16
+
+# ArathiHighlands
+PvPLife.Zone.ArathiHighlands.Enable = 0
+PvPLife.Zone.ArathiHighlands.MinPopulation = 8
+PvPLife.Zone.ArathiHighlands.MaxPopulation = 16
+
+# Ashenvale
+PvPLife.Zone.Ashenvale.Enable = 0
+PvPLife.Zone.Ashenvale.MinPopulation = 8
+PvPLife.Zone.Ashenvale.MaxPopulation = 16
+
+# Grizzly_Blackriver
+PvPLife.Zone.Grizzly_Blackriver.Enable = 0
+PvPLife.Zone.Grizzly_Blackriver.MinPopulation = 10
+PvPLife.Zone.Grizzly_Blackriver.MaxPopulation = 20
+
+# Grizzly_VentureBay
+PvPLife.Zone.Grizzly_VentureBay.Enable = 0
+PvPLife.Zone.Grizzly_VentureBay.MinPopulation = 10
+PvPLife.Zone.Grizzly_VentureBay.MaxPopulation = 20
+
+
+###################################################################################################
+# 08 - FOR THE HORDE / FOR THE ALLIANCE
+###################################################################################################
+
+# Faction pressure on enemy capitals / faction territory.
+# Deliberately treated as normal world PvP, not as a scripted server announcement event.
+PvPLife.ForTheHorde.Enable = 1
+
+PvPLife.ForTheAlliance.Enable = 1
+
+# Chance per manager tick to attempt one faction campaign after its global cooldown.
+PvPLife.FactionCampaign.ChancePerTick = 12
+
+PvPLife.FactionCampaign.GlobalCooldownSeconds = 3600
+
+# ForTheHorde_Stormwind
+PvPLife.Zone.ForTheHorde_Stormwind.Enable = 1
+PvPLife.Zone.ForTheHorde_Stormwind.MinPopulation = 12
+PvPLife.Zone.ForTheHorde_Stormwind.MaxPopulation = 28
+
+# ForTheAlliance_Orgrimmar
+PvPLife.Zone.ForTheAlliance_Orgrimmar.Enable = 1
+PvPLife.Zone.ForTheAlliance_Orgrimmar.MinPopulation = 12
+PvPLife.Zone.ForTheAlliance_Orgrimmar.MaxPopulation = 28
+
+
+###################################################################################################
+# 09 - BOT CHAT AND PVP STRATEGIES
+###################################################################################################
+# Chat text, channels and weighted lines remain in the pvp_life_chat WORLD table.
+
+# Used mainly for faction-city fights. Lines are stored in pvp_life_chat.
+PvPLife.BotChat.Enable = 1
+
+PvPLife.BotChat.YellChance = 70
+
+PvPLife.BotChat.WorldChance = 35
+
+PvPLife.Strategies.Combat = "+pvp,+boost,+dps debuff,-passive,-stay"
+
+PvPLife.Strategies.NonCombat = "+pvp,+boost,-passive,-stay"
+
+PvPLife.Strategies.DuelNonCombat = "+duel,+pvp,+boost,+stay,-follow,-passive,-grind"
+
+
+###################################################################################################
+# 10 - CUSTOM CITY LIFE
+###################################################################################################
+# Independent of PvPLife.Enable; CityLife.Enable must also be ON.
+# All six features default ON. Each feature has its own Enable switch.
+# Fishing Life has its own separate section 11 and is unaffected by CityLife.Custom.Enable.
+# Dedicated roles use real playerbots and count INSIDE CityLife.Population.MaxTotal.
+# If no eligible bot is available, CreateMissing can create/log in a separate module-owned participant.
+# Default requests: 9 Legendary + 2 Beggar + 3 Buyer + 2 TrainingDummy = 16 bots.
+# Reactions and conversations reuse normal residents and do not reserve additional bots.
+# Population is per city: set 0 to disable that role in one city, or raise it to request more.
+# More requested bots need matching online faction/level candidates and safe spots/MMAP data.
+# Default beggars use actual level-1 bots; CreateMissing can provision them without lowering another character.
+# Run world_city_life_custom.sql on WORLD, and both characters_city_life_custom*.sql files on CHARACTERS.
+# Existing WORLD coordinates, faction assignments, weights and chat texts remain editable data.
+# Missing Custom data disables only Custom functionality; the original module remains usable.
+
+CityLife.Custom.Enable = 1
+
+# Create and log in a missing Custom participant at an allowed level, using module-owned accounts.
+# Existing correctly leveled managed characters are reused; existing characters are never downleveled.
+# These bots are additional to the normal Playerbots MinRandomBots/MaxRandomBots online pool.
+# Count them in TOTAL online-bot budgets. All assigned Custom roles still share the CityLife 300 cap.
+# MaxBots limits persistent NON-FISHING managed characters, including pending work; not role population.
+# Fishing Life uses a separate quota in section 11; existing registered fishing identities are retained.
+# Creation is gradual and can fail/retry if an account, character, login or quota requirement cannot be met.
+# Disabling CreateMissing stops provisioning; existing managed records remain reusable after reenabling.
+CityLife.Custom.CreateMissing.Enable = 1
+CityLife.Custom.CreateMissing.MaxBots = 30
+CityLife.Custom.CreateMissing.CreateIntervalSeconds = 30
+CityLife.Custom.CreateMissing.AccountPrefix = "citylife"
+
+# Keep Custom roles at the configured population throughout the day.
+# Set 1 to apply the normal CityLife.Time multipliers to these roles too.
+CityLife.Custom.TimeScaling = 0
+
+# 0 keeps a role assigned until disabled/unavailable; positive seconds rotate participants.
+CityLife.Custom.ResidenceSeconds = 0
+
+# Ambient role chat requires a real player within this many yards, on the same map/phase.
+CityLife.Custom.Chat.Range = 40
+
+# Legendary AFK characters - three per city by default.
+# Class-specific outfits and the mount are configured below. Original equipment is restored on release.
+CityLife.Custom.Legendary.Enable = 1
+# Keep the same module-managed character for each city/slot, including after a restart.
+# New fixed slots need CreateMissing enabled; existing registered slots remain reusable.
+CityLife.Custom.Legendary.FixedIdentity = 1
+CityLife.Custom.Legendary.MinLevel = 80
+CityLife.Custom.Legendary.MaxLevel = 80
+CityLife.Custom.Legendary.Stormwind.Population = 3
+CityLife.Custom.Legendary.Orgrimmar.Population = 3
+CityLife.Custom.Legendary.Dalaran.Population = 3
+
+# Class mix for NEW managed Legendary identities. Names or class IDs, separated by commas.
+# New slots prefer the least represented eligible class in that city; ties use this order.
+# Existing identities/classes remain unchanged. Empty quotes stop new Legendary identities.
+CityLife.Custom.Legendary.Classes = "Warrior,Rogue,Paladin"
+
+# Raw creature display ID, not a mount item or spell. 21974 = Swift Spectral Tiger.
+# Fixed fallback when random selection is disabled/empty; 0 disables all Legendary mount visuals.
+CityLife.Custom.Legendary.MountDisplayId = 21974
+# Choose a stable mount per character from this list; restarts keep the same selection.
+# 21974 = Swift Spectral Tiger; 15676 = Black Qiraji Battle Tank. No mount is permanently learned.
+CityLife.Custom.Legendary.Mount.Randomize = 1
+CityLife.Custom.Legendary.Mount.DisplayIds = "21974,15676"
+
+# Full Phase 4 BiS profiles bundled from mod-npc-talent-template, including the real BiS weapons.
+# The template NPC module does not need to be installed. 0 uses the earlier Tier 10 outfits.
+# Enchants/gems affect generated temporary items only; borrowed original items remain intact.
+CityLife.Custom.Legendary.TemplateGear.Enable = 1
+# Ashen Verdict BiS rings require Exalted. Grant it only to module-owned Legendary characters.
+# This persistent reputation is retained when disabled, just like saved HK/achievement history.
+CityLife.Custom.Legendary.TemplateGear.ExaltedReputation = 1
+CityLife.Custom.Legendary.Enchants.Enable = 1
+CityLife.Custom.Legendary.Gems.Enable = 1
+
+# Temporary T6 armor and legendary weapon appearances; real BiS stats, enchants and gems stay intact.
+# Requires this update of mod-transmog, with BOTH modules enabled and built statically.
+# Missing/disabled transmog keeps the real BiS appearance. Normal player transmog rules stay unchanged.
+# Only default TemplateGear profiles use these skins. DK keeps its BiS armor: there is no DK T6 set.
+# HideOffhand hides only the extra visual when a two-handed weapon skin is used; its stats remain.
+# No permanent appearance collection unlocks or learned mount are granted by these cosmetics.
+CityLife.Custom.Legendary.Skins.Enable = 1
+CityLife.Custom.Legendary.Skins.Armor.Enable = 1
+CityLife.Custom.Legendary.Skins.Weapons.Enable = 1
+CityLife.Custom.Legendary.Skins.HideOffhand = 1
+
+# "default" selects the bundled class-specific BiS profiles, with the separate cosmetic options above.
+# To customize, use item-entry IDs separated by commas; separate alternative outfits with semicolons.
+# Example Warrior.Outfits = "51227,51229,51225,51226,51228,32837,32838"
+# Empty quotes disable that class's Legendary selection. Invalid/ineligible profiles are skipped.
+# A character keeps a deterministic choice from its usable alternatives; config changes can change it.
+CityLife.Custom.Legendary.Warrior.Outfits = "default"
+CityLife.Custom.Legendary.Paladin.Outfits = "default"
+CityLife.Custom.Legendary.Hunter.Outfits = "default"
+CityLife.Custom.Legendary.Rogue.Outfits = "default"
+CityLife.Custom.Legendary.Priest.Outfits = "default"
+CityLife.Custom.Legendary.DeathKnight.Outfits = "default"
+CityLife.Custom.Legendary.Shaman.Outfits = "default"
+CityLife.Custom.Legendary.Mage.Outfits = "default"
+CityLife.Custom.Legendary.Warlock.Outfits = "default"
+CityLife.Custom.Legendary.Druid.Outfits = "default"
+
+# Persistent veteran history is applied ONLY to verified module-owned Legendary characters.
+# These are minimum lifetime HK and achievement POINTS, not spendable honor or achievement counts.
+# Raising values can add history; lowering/disabling does not erase already saved progress.
+# Randomize chooses different stable targets per character; restarts keep the same identity's targets.
+# HK defaults vary from 11,000 to 25,000; achievement targets vary from 5,100 to 6,000 points.
+# Set each Randomize switch to 0 to use the fixed HonorableKills / AchievementPoints value instead.
+CityLife.Custom.Legendary.Honor.Enable = 1
+CityLife.Custom.Legendary.Honor.Randomize = 1
+CityLife.Custom.Legendary.HonorableKills = 10000
+CityLife.Custom.Legendary.HonorableKills.Min = 11000
+CityLife.Custom.Legendary.HonorableKills.Max = 25000
+CityLife.Custom.Legendary.Achievements.Enable = 1
+CityLife.Custom.Legendary.Achievements.Randomize = 1
+CityLife.Custom.Legendary.AchievementPoints = 5000
+CityLife.Custom.Legendary.AchievementPoints.Min = 5100
+CityLife.Custom.Legendary.AchievementPoints.Max = 6000
+
+# "default" uses validated dungeon/raid/general achievements; realm-first and reward-mail entries are excluded.
+# Custom values are comma-separated achievement IDs, still subject to validity and safety checks.
+CityLife.Custom.Legendary.AchievementIds = "default"
+
+# Shared across all cities and factions. No custom tabard, ranks or permanent pet are assigned.
+# An unrelated guild with the same name is left untouched; membership is then skipped.
+CityLife.Custom.Legendary.Guild.Enable = 1
+CityLife.Custom.Legendary.Guild.Name = "The GOATS"
+
+# Level-1 beggars - underwear, sparse begging/dance emotes and varied local chat.
+# The default range is 1-1. CreateMissing can supply a matching bot if the normal pool has none.
+# Set MinLevel and MaxLevel to the same other value to request another exact beggar level.
+CityLife.Custom.Beggar.Enable = 1
+CityLife.Custom.Beggar.MinLevel = 1
+CityLife.Custom.Beggar.MaxLevel = 1
+CityLife.Custom.Beggar.Stormwind.Population = 1
+CityLife.Custom.Beggar.Orgrimmar.Population = 1
+CityLife.Custom.Beggar.ChatMinSeconds = 180
+CityLife.Custom.Beggar.ChatMaxSeconds = 420
+CityLife.Custom.Beggar.YellChancePct = 20
+# Separate idle emotes; dancing ends after the configured short duration.
+CityLife.Custom.Beggar.EmoteMinSeconds = 45
+CityLife.Custom.Beggar.EmoteMaxSeconds = 120
+CityLife.Custom.Beggar.DanceChancePct = 25
+CityLife.Custom.Beggar.DanceSeconds = 8
+
+# Roam near the original plaza anchor, pausing to beg/dance; validated dry-ground walking paths only.
+# Radius is yards from the fixed hub spot, so repeated trips never drift away from the square.
+# Walk = 0 runs; Walk = 1 walks. Other resident movement settings remain independent.
+CityLife.Custom.Beggar.Wander.Enable = 1
+CityLife.Custom.Beggar.Wander.Radius = 10
+CityLife.Custom.Beggar.Wander.MinSeconds = 10
+CityLife.Custom.Beggar.Wander.MaxSeconds = 25
+CityLife.Custom.Beggar.Wander.Walk = 0
+
+# Occasionally request a normal trade with a nearby available real player of the same faction.
+# Chance is checked after each random interval; per-player cooldown is shared across all beggars.
+# Ignore/DND/AFK, combat, movement and core trade restrictions are respected.
+# Flavor request only: the beggar does not accept/complete item or gold transfers.
+# The bot cancels its own unanswered/open request after DurationSeconds, or when its role ends.
+CityLife.Custom.Beggar.Trade.Enable = 1
+CityLife.Custom.Beggar.Trade.MinSeconds = 180
+CityLife.Custom.Beggar.Trade.MaxSeconds = 420
+CityLife.Custom.Beggar.Trade.ChancePct = 25
+CityLife.Custom.Beggar.Trade.Range = 8
+CityLife.Custom.Beggar.Trade.DurationSeconds = 15
+CityLife.Custom.Beggar.Trade.PlayerCooldownSeconds = 600
+
+# Buyers advertise level 70-80 green gear for 10 gold; these are ambient messages only.
+# They do not automatically trade, accept an item or pay gold. Text remains in city_life_custom_chat.
+CityLife.Custom.Buyer.Enable = 1
+CityLife.Custom.Buyer.MinLevel = 1
+CityLife.Custom.Buyer.MaxLevel = 80
+CityLife.Custom.Buyer.Stormwind.Population = 1
+CityLife.Custom.Buyer.Orgrimmar.Population = 1
+CityLife.Custom.Buyer.Dalaran.Population = 1
+CityLife.Custom.Buyer.ChatMinSeconds = 180
+CityLife.Custom.Buyer.ChatMaxSeconds = 420
+CityLife.Custom.Buyer.YellChancePct = 0
+
+# Training uses existing practice dummies only, alternating practice and rest.
+# No Dalaran site is bundled because the local base data has no city training dummy there.
+CityLife.Custom.TrainingDummy.Enable = 1
+CityLife.Custom.TrainingDummy.MinLevel = 80
+CityLife.Custom.TrainingDummy.MaxLevel = 80
+CityLife.Custom.TrainingDummy.Stormwind.Population = 1
+CityLife.Custom.TrainingDummy.Orgrimmar.Population = 1
+CityLife.Custom.TrainingDummy.PracticeMinSeconds = 60
+CityLife.Custom.TrainingDummy.PracticeMaxSeconds = 180
+CityLife.Custom.TrainingDummy.RestMinSeconds = 15
+CityLife.Custom.TrainingDummy.RestMaxSeconds = 45
+CityLife.Custom.TrainingDummy.TargetRange = 15
+# Existing AzerothCore practice dummy entries; every target must also use npc_training_dummy.
+CityLife.Custom.TrainingDummy.TargetEntries = "31144,31146,32666,32667"
+
+# Player reactions reuse existing residents. Target a resident with /wave, /bow or /dance.
+# Chance and per-player/per-bot cooldowns prevent repeated responses flooding the scene.
+CityLife.Custom.PlayerReactions.Enable = 1
+CityLife.Custom.PlayerReactions.ChancePct = 70
+CityLife.Custom.PlayerReactions.CooldownSeconds = 30
+CityLife.Custom.PlayerReactions.Range = 20
+
+# Conversations reuse two nearby residents: question -> reply -> thanks.
+# A nearby real player is required; missing/busy/moved participants cancel a pending exchange.
+# Text/channel/faction data lives in city_life_custom_chat; each group has steps 0, 1 and 2.
+CityLife.Custom.Conversations.Enable = 1
+CityLife.Custom.Conversations.MinSeconds = 180
+CityLife.Custom.Conversations.MaxSeconds = 420
+CityLife.Custom.Conversations.Range = 25
+CityLife.Custom.Conversations.PartnerRange = 12
+CityLife.Custom.Conversations.ReplyMinSeconds = 2
+CityLife.Custom.Conversations.ReplyMaxSeconds = 5
+CityLife.Custom.Conversations.MaxConcurrent = 2
+
+
+###################################################################################################
+# 11 - FISHING LIFE
+###################################################################################################
+# Independent component with its own settings; CityLife.Custom.Enable does not control fishing.
+# CityLife.Enable must be ON because Fishing Life uses its shared scheduler and population cap.
+# Apply data/sql/manual/world_city_life_fishing.sql to WORLD after world_city_life_custom.sql.
+# The historical equipment recovery/managed-bot CHARACTERS tables are shared; identities are preserved.
+# These are real playerbots displaying a pole and casting; no fishing loot or skill farming.
+# Default request: 46 fishing slots across 20 locations, inside CityLife.Population.MaxTotal = 300.
+# Counts are requests: eligible bots, safe dry ground, reachable water and free space are required.
+# Set a location's Enable to 0 or Population to 0 to stop only that waterfront.
+# Routine switches, populations, levels and timing are configured here; coordinates/chat remain data.
+
+FishingLife.Enable = 1
+
+# Missing participants can be created/logged in through a SEPARATE managed fishing pool.
+# Existing registered fishing identities, including the original three, count against this quota only.
+# MaxBots counts persistent records/pending work; it does not guarantee that many active fishers.
+# Disable CreateMissing to stop NEW character creation; registered eligible characters remain reusable.
+# Extra managed sessions count toward total online bots and server capacity, outside random-bot targets.
+# Example: 1,000 total online - 440 default Life planning peak leaves 560 nominal free dungeon/BG bots.
+# Check free level-80 dungeon roles and BG brackets separately; see section 02 for population planning.
+FishingLife.CreateMissing.Enable = 1
+FishingLife.CreateMissing.MaxBots = 46
+FishingLife.CreateMissing.CreateIntervalSeconds = 30
+# 1-8 letters/digits, distinct from Custom and Playerbots random-account prefixes.
+FishingLife.CreateMissing.AccountPrefix = "fishlife"
+
+# Keep fishing populations constant; 1 applies CityLife.Time multipliers.
+FishingLife.TimeScaling = 0
+# 0 keeps an available participant assigned; positive seconds request rotation.
+FishingLife.ResidenceSeconds = 0
+
+# Global level bounds constrain every location. Each location also has its own bounds below.
+# Existing higher-level characters are never lowered to fill a requested range.
+FishingLife.MinLevel = 1
+FishingLife.MaxLevel = 80
+
+# Minimum separation in yards. If safe shore space is exhausted, fewer bots appear rather than stack.
+FishingLife.MinimumSpacing = 2
+
+# Maximum dry-ground height above/below the water in yards, useful for docks (default 12).
+# Water depth and line-of-sight checks remain mandatory; raising this does not create safe ground.
+FishingLife.MaximumWaterHeightDifference = 12
+
+# Sparse fishing cast/channel timing. PoleItem must be a usable real fishing pole.
+# Newly provisioned fishers learn fishing; borrowed bots must already qualify to equip the pole.
+FishingLife.CastMinSeconds = 20
+FishingLife.CastMaxSeconds = 35
+FishingLife.Spell = 7620
+FishingLife.PoleItem = 6256
+
+# Fishing chat requires a nearby real player of the same faction/map/phase.
+# Text remains in city_life_custom_chat, group_name = fishing (legacy table name retained).
+FishingLife.Chat.Range = 40
+FishingLife.ChatMinSeconds = 180
+FishingLife.ChatMaxSeconds = 420
+FishingLife.YellChancePct = 0
+
+# During Wintergrasp battles, release local fishing assignments and restore their equipment.
+# The normal scheduler can refill them after the battle; no fishing is forced into active combat.
+FishingLife.Wintergrasp.PauseDuringBattle = 1
+
+# --- Capitals ---
+
+# Stormwind - canals and harbor
+FishingLife.Stormwind.Enable = 1
+FishingLife.Stormwind.Population = 3
+FishingLife.Stormwind.MinLevel = 1
+FishingLife.Stormwind.MaxLevel = 80
+
+# Orgrimmar - Valley of Honor
+FishingLife.Orgrimmar.Enable = 1
+FishingLife.Orgrimmar.Population = 3
+FishingLife.Orgrimmar.MinLevel = 1
+FishingLife.Orgrimmar.MaxLevel = 80
+
+# Dalaran - fountain
+FishingLife.Dalaran.Enable = 1
+FishingLife.Dalaran.Population = 3
+FishingLife.Dalaran.MinLevel = 68
+FishingLife.Dalaran.MaxLevel = 80
+
+# Ironforge - Forlorn Cavern
+FishingLife.Ironforge.Enable = 1
+FishingLife.Ironforge.Population = 2
+FishingLife.Ironforge.MinLevel = 1
+FishingLife.Ironforge.MaxLevel = 80
+
+# Thunder Bluff - pond
+FishingLife.ThunderBluff.Enable = 1
+FishingLife.ThunderBluff.Population = 2
+FishingLife.ThunderBluff.MinLevel = 1
+FishingLife.ThunderBluff.MaxLevel = 80
+
+# Undercity - canals
+FishingLife.Undercity.Enable = 1
+FishingLife.Undercity.Population = 2
+FishingLife.Undercity.MinLevel = 1
+FishingLife.Undercity.MaxLevel = 80
+
+# Darnassus - lake
+FishingLife.Darnassus.Enable = 1
+FishingLife.Darnassus.Population = 2
+FishingLife.Darnassus.MinLevel = 1
+FishingLife.Darnassus.MaxLevel = 80
+
+# --- Eastern Kingdoms and Kalimdor waterfronts ---
+
+# Booty Bay
+FishingLife.BootyBay.Enable = 1
+FishingLife.BootyBay.Population = 2
+FishingLife.BootyBay.MinLevel = 30
+FishingLife.BootyBay.MaxLevel = 80
+
+# Ratchet
+FishingLife.Ratchet.Enable = 1
+FishingLife.Ratchet.Population = 2
+FishingLife.Ratchet.MinLevel = 10
+FishingLife.Ratchet.MaxLevel = 80
+
+# Theramore
+FishingLife.Theramore.Enable = 1
+FishingLife.Theramore.Population = 2
+FishingLife.Theramore.MinLevel = 35
+FishingLife.Theramore.MaxLevel = 80
+
+# Auberdine
+FishingLife.Auberdine.Enable = 1
+FishingLife.Auberdine.Population = 2
+FishingLife.Auberdine.MinLevel = 10
+FishingLife.Auberdine.MaxLevel = 80
+
+# Menethil Harbor
+FishingLife.MenethilHarbor.Enable = 1
+FishingLife.MenethilHarbor.Population = 2
+FishingLife.MenethilHarbor.MinLevel = 20
+FishingLife.MenethilHarbor.MaxLevel = 80
+
+# Crystal Lake - Elwynn Forest
+FishingLife.CrystalLake.Enable = 1
+FishingLife.CrystalLake.Population = 2
+FishingLife.CrystalLake.MinLevel = 5
+FishingLife.CrystalLake.MaxLevel = 80
+
+# --- Northrend waterfronts ---
+
+# Valiance Keep - shore
+FishingLife.ValianceKeep.Enable = 1
+FishingLife.ValianceKeep.Population = 3
+FishingLife.ValianceKeep.MinLevel = 68
+FishingLife.ValianceKeep.MaxLevel = 80
+
+# Warsong Hold - Garrosh's Landing coast below the hold
+FishingLife.WarsongHold.Enable = 1
+FishingLife.WarsongHold.Population = 2
+FishingLife.WarsongHold.MinLevel = 68
+FishingLife.WarsongHold.MaxLevel = 80
+
+# Wintergrasp - lakeside
+FishingLife.Wintergrasp.Enable = 1
+FishingLife.Wintergrasp.Population = 2
+FishingLife.Wintergrasp.MinLevel = 70
+FishingLife.Wintergrasp.MaxLevel = 80
+
+# Moa'ki Harbor
+FishingLife.MoakiHarbor.Enable = 1
+FishingLife.MoakiHarbor.Population = 3
+FishingLife.MoakiHarbor.MinLevel = 68
+FishingLife.MoakiHarbor.MaxLevel = 80
+
+# Kamagua
+FishingLife.Kamagua.Enable = 1
+FishingLife.Kamagua.Population = 3
+FishingLife.Kamagua.MinLevel = 68
+FishingLife.Kamagua.MaxLevel = 80
+
+# Unu'pe
+FishingLife.Unupe.Enable = 1
+FishingLife.Unupe.Population = 2
+FishingLife.Unupe.MinLevel = 68
+FishingLife.Unupe.MaxLevel = 80
+
+# Dalaran - Underbelly
+FishingLife.DalaranUnderbelly.Enable = 1
+FishingLife.DalaranUnderbelly.Population = 2
+FishingLife.DalaranUnderbelly.MinLevel = 68
+FishingLife.DalaranUnderbelly.MaxLevel = 80

@@ -5,8 +5,10 @@
  */
 
 void AddCityLifeScripts();
+void AddPvPLifeScripts();
 
 void Addmod_playerbots_city_lifeScripts()
 {
     AddCityLifeScripts();
+    AddPvPLifeScripts();
 }

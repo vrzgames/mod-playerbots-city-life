@@ -28,6 +28,8 @@ namespace CityLife
         void LoadConfig();
         void Update(uint32 diff);
         bool HandleCommand(ChatHandler* handler, std::string const& text);
+        void OnPlayerBeforeLogout(Player* player);
+        void Shutdown();
 
     private:
         Manager() = default;
@@ -50,20 +52,27 @@ namespace CityLife
         Spot const* ChooseSpot(Hub const& hub, uint32 ignoredSpotId = 0) const;
         uint32 CountResidents(uint32 hubId) const;
         uint32 TargetPopulation(Hub const& hub) const;
+        bool IsFishingPaused(Hub const& hub) const;
         uint32 CurrentTimeMultiplier() const;
+        std::vector<Hub> EffectiveHubs() const;
 
-        bool AddResident(Hub const& hub);
-        void ReleaseResident(Resident const& resident, bool returnHome);
+        bool AddResident(Hub const& hub, uint32 targetPopulation);
+        bool ReleaseResident(Resident const& resident, bool returnHome);
         void ReleaseAll(bool returnHome);
         void RemoveUnavailableResidents();
         void MaintainPopulation();
         void MaintainResidents();
+        void MaintainCustomResidents();
+        void UpdateSocialResidents();
         void RelocateResident(Resident& resident, Hub const& hub);
+        Spot const* BeggarAnchor(Resident const& resident) const;
+        void WanderBeggar(Player* player, Resident& resident, Hub const& hub);
         bool AssignSpot(Resident& resident, Hub const& hub, Spot const& spot, bool allowStationary);
         bool StartMovement(Player* player, Resident& resident) const;
         void FinishMovement(Player* player, Resident& resident, bool arrived) const;
 
         void ApplyCityStrategies(Player* player) const;
+        void ApplyQuestingStrategies(Player* player, bool force = false) const;
         void SetStayPosition(Player* player, Resident const& resident) const;
         void ClearCityStrategies(Player* player) const;
         bool TeleportBot(Player* player, uint32 mapId, float x, float y, float z, float o) const;
@@ -82,6 +91,15 @@ namespace CityLife
         uint32 _tickSeconds = 10;
         uint32 _startupElapsedMs = 0;
         uint32 _timerMs = 0;
+        uint32 _customTimerMs = 0;
+        bool _fixedLegendaryIdentity = true;
+        float _fishingMinimumSpacing = 2.0f;
+        bool _fishingPauseDuringBattle = true;
+        bool _beggarWanderEnabled = true;
+        float _beggarWanderRadius = 10.0f;
+        uint32 _beggarWanderMinSeconds = 10;
+        uint32 _beggarWanderMaxSeconds = 25;
+        bool _beggarWanderWalk = false;
 
         bool _usePlayerbotConfig = true;
         std::string _botAccountPrefix = "auto";
@@ -113,10 +131,13 @@ namespace CityLife
         std::unordered_set<std::string> _staticServiceHubs;
         std::unordered_set<std::string> _staticServiceCategories;
         std::string _nonCombatStrategies = "+stay,-follow,-passive,-grind,-rpg,-travel,-duel,-pvp";
+        bool _questingEnabled = false;
 
         std::vector<Hub> _hubs;
         std::vector<Resident> _residents;
         std::unordered_map<uint32, bool> _botAccountCache;
+        std::unordered_map<uint32, std::weak_ptr<QuestingControl>> _questingControls;
+        std::unordered_map<uint64, uint32> _questerCooldownUntil;
     };
 }
 

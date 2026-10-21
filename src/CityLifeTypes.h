@@ -9,11 +9,24 @@
 
 #include "Define.h"
 
+#include <memory>
 #include <string>
 #include <vector>
 
 namespace CityLife
 {
+    struct QuestingControl;
+
+    enum class CustomRole : uint8
+    {
+        None,
+        Legendary,
+        Beggar,
+        Buyer,
+        TrainingDummy,
+        Fishing
+    };
+
     enum class TeamSide : uint8
     {
         Alliance = 0,
@@ -49,6 +62,12 @@ namespace CityLife
         uint32 Priority = 100;
         bool UseTimeScaling = true;
         uint32 ResidenceSeconds = 0;
+        bool Questing = false;
+        CustomRole Custom = CustomRole::None;
+        std::string CustomCity;
+        uint32 QuestZoneId = 0;
+        float QuestRadius = 1200.0f;
+        uint32 QuestIdleSeconds = 300;
         std::vector<Spot> Spots;
     };
 
@@ -67,6 +86,7 @@ namespace CityLife
         BotCandidate Bot;
         uint32 HubId = 0;
         uint32 SpotId = 0;
+        CustomRole Custom = CustomRole::None;
         uint32 TargetMap = 0;
         uint32 OriginalMap = 0;
         float OriginalX = 0.0f;
@@ -89,8 +109,12 @@ namespace CityLife
         float ProgressZ = 0.0f;
         uint8 MovementRetries = 0;
         bool Travelling = false;
+        uint32 NextActivityCheckAt = 0;
         uint32 ReleaseAt = 0;
         bool Stationary = false;
+        uint32 OriginalRandomize = 0;
+        bool RandomizeHeld = false;
+        std::shared_ptr<QuestingControl> Questing;
     };
 }
 

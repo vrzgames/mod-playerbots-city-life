@@ -1,0 +1,33 @@
+{
+  "origin": "https://github.com/azerothcore/mod-transmog.git",
+  "base_revision": "327753a05b9024f2a90738bb08e9b8afc2fc9a21",
+  "local_origin_master": "327753a05b9024f2a90738bb08e9b8afc2fc9a21",
+  "baseline_equals_upstream_revision": true,
+  "patch": "mod-transmog-city-life.patch",
+  "patch_sha256": "da2983d43b9ef2388e91368375a2d8ea0a3bf3cd3def6f424b4ed271be7c92e7",
+  "files": [
+    {
+      "path": "src/Transmogrification.cpp",
+      "baseline_sha256": "5ab824d901b33b3f554676aea3ed67774bb1ca3f47e4c465755723421347d3a8",
+      "live_sha256": "4c5f9a30e6d9aee4eea7ad27f40cd6745784c7f33efee852367d437c04b01680"
+    },
+    {
+      "path": "src/Transmogrification.h",
+      "baseline_sha256": "fda5cd7330397b872739df1473acf34d44659bb9612211592b04ff000f462ec8",
+      "live_sha256": "a2b8bb1ff1d158f1682b38e9141879879866fffa409f08acf0f40dc519ed6d6f"
+    },
+    {
+      "path": "src/transmog_scripts.cpp",
+      "baseline_sha256": "c9a428cd94b7a93c898fd4dc9407d785a803f8a1fc8c47b6cf42eddcab081eea",
+      "live_sha256": "c6b5a1336d81826ac274e69f1339a86954822def0c527a72bf89904c51a8c7fe"
+    }
+  ],
+  "checks": {
+    "git_apply_check": true,
+    "git_apply_reproduces_live_bytes": true,
+    "git_reverse_apply_check": true,
+    "git_diff_whitespace_check": true,
+    "commits_created": false,
+    "live_files_modified": false
+  }
+}
