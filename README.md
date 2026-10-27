@@ -1,7 +1,9 @@
 # City Life
 
 Created by **iCore**.
+
 "If you love something, set it free"
+
 My goal is to make bots feel like the population of a busy **1,000–2,000-player server**.
 Populations, locations and features are configurable, so you can manually tune the activity
 to fit your own server.
