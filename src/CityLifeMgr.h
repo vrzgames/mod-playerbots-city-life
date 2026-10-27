@@ -64,6 +64,7 @@ namespace CityLife
         void MaintainResidents();
         void MaintainCustomResidents();
         void UpdateSocialResidents();
+        void UpdateHumanBehaviorResidents();
         void RelocateResident(Resident& resident, Hub const& hub);
         Spot const* BeggarAnchor(Resident const& resident) const;
         void WanderBeggar(Player* player, Resident& resident, Hub const& hub);

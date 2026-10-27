@@ -10,6 +10,7 @@
 #include "CityLifeCustomAppearance.h"
 #include "CityLifeCustomBotPool.h"
 #include "CityLifeCustomSocial.h"
+#include "CityLifeHumanBehavior.h"
 #include "LifeBotReservation.h"
 
 #include "Chat.h"
@@ -69,6 +70,7 @@ class CityLifeCustomPlayerScript : public PlayerScript
 public:
     CityLifeCustomPlayerScript() : PlayerScript("CityLifeCustomPlayerScript",
         {PLAYERHOOK_ON_TEXT_EMOTE, PLAYERHOOK_ON_LOGIN, PLAYERHOOK_ON_BEFORE_LOGOUT,
+            PLAYERHOOK_ON_PLAYER_ENTER_COMBAT,
             PLAYERHOOK_CAN_INIT_TRADE, PLAYERHOOK_CAN_SET_TRADE_ITEM, PLAYERHOOK_CAN_SELL_ITEM,
             PLAYERHOOK_CAN_SEND_MAIL, PLAYERHOOK_CAN_GROUP_ACCEPT, PLAYERHOOK_CAN_JOIN_LFG,
             PLAYERHOOK_CAN_JOIN_IN_BATTLEGROUND_QUEUE, PLAYERHOOK_CAN_JOIN_IN_ARENA_QUEUE}) { }
@@ -87,6 +89,11 @@ public:
     }
 
     void OnPlayerBeforeLogout(Player* player) override { sCityLifeMgr.OnPlayerBeforeLogout(player); }
+
+    void OnPlayerEnterCombat(Player* player, Unit* /*enemy*/) override
+    {
+        sCityLifeHumanBehavior.Wake(player);
+    }
 
     bool OnPlayerCanInitTrade(Player* player, Player* target) override
     {

@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-10-25 - Human behavior update
+
+- Add independently configurable, infrequent inspect, weapon sheath and owned cosmetic-companion
+  behavior near real players, with bounded checks, per-bot cooldowns and lifecycle cleanup.
+- Limit inspect/sheath to ordinary City Life residents and questers; companions and optional sitting
+  require idle ordinary residents. Exclude Custom, Fishing and PvP Life participants and grouped or
+  human-controlled bots. Disable every feature in combat, BGs, arenas, dungeons and raids.
+- Preserve navigation, movement generators, MMaps and combat targets. Keep physical random jump and
+  strafe unavailable even when configured on, with a warning instead of an unsafe fallback.
+- Protect charged temporary weapon enchants and Hunter/Warlock combat pets. Summon only known, owned
+  cosmetic MINIPET spells; do not grant pets or replace existing companions.
+- Keep sitting opt-in because actual sit state can affect the first incoming melee hit; let the bot
+  AI, resting and movement take priority. Keep companion summoning opt-in pending in-game verification.
+  Document settings and manual verification. No SQL changes.
+
 ## 2026-10-21 — Restore the previous Legendary equipment system
 
 - Restore the pre-transmog Legendary implementation: enchanted/gemmed BiS profiles with actual

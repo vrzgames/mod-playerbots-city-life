@@ -161,6 +161,84 @@ CityLife.Behaviour.StaticServiceCategories = "auction,bank"
 CityLife.Strategies.NonCombat = "+stay,-follow,-passive,-grind,-rpg,-travel,-duel,-pvp"
 
 
+# Human behavior - ordinary City Life residents and questers
+# Requires CityLife.Enable. Each feature has its own switch and cooldown.
+# Only open-world, out-of-combat bots near a real player are eligible.
+# Custom/Fishing/PvP participants, grouped bots and human-controlled bots are excluded.
+# No movement generators, navigation paths or combat targets are changed.
+# See docs/HUMAN_BEHAVIOR.md for limits and an in-game verification checklist.
+
+CityLife.HumanBehavior.Enable = 1
+
+# Rare checks use a bounded rotating batch; active cosmetic cleanup runs separately.
+CityLife.HumanBehavior.CheckIntervalSeconds = 10
+
+CityLife.HumanBehavior.MaxBotsPerCheck = 32
+
+# Required nearby real-player observer distance in yards.
+CityLife.HumanBehavior.ObserverRange = 60
+
+# Minimum uninterrupted idle time before idle-only behaviors can start.
+CityLife.HumanBehavior.IdleSeconds = 15
+
+# Unsupported safely on the current spline API. Both remain disabled even if set to 1;
+# enabling either only logs a warning. There is no movement-interrupting fallback.
+CityLife.HumanBehavior.RandomJump.Enable = 0
+
+CityLife.HumanBehavior.RandomStrafe.Enable = 0
+
+# Real inspect request without selection/combat-target changes or visible animation.
+# Range is in yards and cannot exceed the core's inspect distance.
+CityLife.HumanBehavior.Inspect.Enable = 1
+
+CityLife.HumanBehavior.Inspect.ChancePct = 15
+
+CityLife.HumanBehavior.Inspect.MinSeconds = 120
+
+CityLife.HumanBehavior.Inspect.MaxSeconds = 300
+
+CityLife.HumanBehavior.Inspect.Range = 20
+
+# Cosmetic weapon draw/sheath. Charged temporary weapon enchants are protected.
+CityLife.HumanBehavior.WeaponSheath.Enable = 1
+
+CityLife.HumanBehavior.WeaponSheath.ChancePct = 10
+
+CityLife.HumanBehavior.WeaponSheath.MinSeconds = 120
+
+CityLife.HumanBehavior.WeaponSheath.MaxSeconds = 300
+
+# Opt-in: ordinary idle city residents only. Actual sitting can make the first incoming
+# melee hit critically strike; a later combat wake cannot undo that hit calculation.
+# The bot AI can stand up earlier. Food/drink and scheduled movement take priority.
+CityLife.HumanBehavior.Sit.Enable = 0
+
+CityLife.HumanBehavior.Sit.ChancePct = 10
+
+CityLife.HumanBehavior.Sit.MinSeconds = 300
+
+CityLife.HumanBehavior.Sit.MaxSeconds = 900
+
+CityLife.HumanBehavior.Sit.DurationMinSeconds = 8
+
+CityLife.HumanBehavior.Sit.DurationMaxSeconds = 20
+
+# Opt-in pending in-game verification; ordinary idle city residents only.
+# Uses a known, owned cosmetic MINIPET spell without occupying the bot's normal spell slot.
+# No pets are granted, and Hunter/Warlock combat pets are never summoned or dismissed.
+CityLife.HumanBehavior.Companion.Enable = 0
+
+CityLife.HumanBehavior.Companion.ChancePct = 10
+
+CityLife.HumanBehavior.Companion.MinSeconds = 300
+
+CityLife.HumanBehavior.Companion.MaxSeconds = 900
+
+CityLife.HumanBehavior.Companion.DurationMinSeconds = 60
+
+CityLife.HumanBehavior.Companion.DurationMaxSeconds = 180
+
+
 ###################################################################################################
 # 03 - CITIES AND TOWNS
 ###################################################################################################

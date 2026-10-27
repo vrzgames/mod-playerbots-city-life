@@ -12,7 +12,9 @@ This update brings **City Life and PvP Life together**, expands city activity an
 many movement, equipment-recovery and configuration fixes.
 
 - **PvP Life is included:** world PvP, duel zones, real-player duel challenges and faction campaigns.
-- **One organized config:** 625 options, with separate city, quest-zone, PvP, Custom and Fishing sections.
+- **One organized config:** 653 options, with separate city, quest-zone, PvP, Custom and Fishing sections.
+- **Human behavior:** rare inspect requests and weapon sheath changes; optional owned cosmetic
+  companions and idle sitting, with movement features held off for navigation safety.
 - **More places to explore:** additional towns, faction quest hubs and world-PvP locations.
 - **Fishing Life:** 20 waterfront locations, 46 default slots, per-location populations and a separate bot pool.
 - **Custom city activity:** Legendary residents, roaming beggars with occasional trade requests,
@@ -43,6 +45,24 @@ achievement-point targets by default, with separate range and fixed-value option
 Legendary residents use the previous equipment system: enchanted/gemmed BiS armor and accessories,
 actual iconic legendary weapons and a Swift Spectral Tiger mount appearance. No transmog integration
 is required. Original equipment is restored when the role ends.
+
+## Human behavior
+
+Ordinary City Life residents and questers can occasionally inspect nearby characters or change
+their weapon sheath state while out of combat and near a real player. Only idle ordinary city
+residents can summon their own cosmetic companions or use optional sitting. Custom characters,
+fishers, PvP Life participants, grouped bots and human-controlled bots are excluded.
+
+Use `CityLife.HumanBehavior.Enable` and each feature's independent switch in config section **02**.
+The component requires `CityLife.Enable = 1`, uses bounded rotating checks and per-bot cooldowns,
+and does not change MMaps, movement generators, paths or combat targets. Inspect has no visible
+animation. Companion handling never touches Hunter or Warlock combat pets.
+
+Physical random jump and strafe remain disabled even if configured on: the current APIs replace
+active movement. Sitting defaults off because a sitting player can receive a critical first melee
+hit; AI posture, rest and movement take priority. Companions are also opt-in pending in-game
+verification. No SQL/schema migration is needed for this update.
+See [Human behavior settings, safety limits and verification](docs/HUMAN_BEHAVIOR.md).
 
 ## Fishing Life
 

@@ -9,6 +9,7 @@
 #include "CityLifeCustomAppearance.h"
 #include "CityLifeCustomBotPool.h"
 #include "CityLifeCustomSocial.h"
+#include "CityLifeHumanBehavior.h"
 #include "CityLifeQuesting.h"
 #include "LifeBotReservation.h"
 
@@ -254,6 +255,7 @@ namespace CityLife
 
     void Manager::LoadConfig()
     {
+        sCityLifeHumanBehavior.Reset();
         // Restore outfits with the old settings before reloading or disabling ambient roles.
         for (auto resident = _residents.begin(); resident != _residents.end();)
             if (resident->Custom != CustomRole::None && ReleaseResident(*resident, true))
@@ -362,6 +364,7 @@ namespace CityLife
         sCityLifeCustomBotPool.SyncHubs(_enable ? EffectiveHubs() : std::vector<Hub>{});
         sCityLifeCustomActivities.LoadData();
         sCityLifeCustomSocial.LoadData();
+        sCityLifeHumanBehavior.LoadConfig();
 
         LOG_INFO("module", "[CityLife] enable={} database={} hubs={} maxTotal={} timeScale={} prefix='{}'",
             _enable ? 1 : 0, _databaseReady ? 1 : 0, _hubs.size(), _maxTotalPopulation,
@@ -963,6 +966,7 @@ namespace CityLife
 
     bool Manager::ReleaseResident(Resident const& resident, bool returnHome)
     {
+        sCityLifeHumanBehavior.Remove(resident.Bot.GuidLow);
         Player* player = FindPlayer(resident.Bot.GuidLow);
         if (resident.Custom == CustomRole::Beggar && player && !player->IsInCombat() &&
             resident.MovementSplineId && player->movespline->GetId() == resident.MovementSplineId)
@@ -1445,6 +1449,7 @@ namespace CityLife
                 MOVEMENTFLAG_ONTRANSPORT | MOVEMENTFLAG_FALLING | MOVEMENTFLAG_FALLING_FAR))
             return false;
 
+        sCityLifeHumanBehavior.Wake(player);
         // Synchronize the spline position before validation, and remove any old movement generator.
         player->StopMoving();
         player->GetMotionMaster()->Clear(false);
@@ -1609,11 +1614,31 @@ namespace CityLife
         sCityLifeCustomSocial.Update(eligible);
     }
 
+    void Manager::UpdateHumanBehaviorResidents()
+    {
+        std::vector<HumanBehaviorBot> candidates;
+        candidates.reserve(_residents.size());
+        uint32 const now = GameTimeSeconds();
+        for (Resident const& resident : _residents)
+        {
+            if (resident.Custom != CustomRole::None)
+                continue;
+            // Only established idle city residents can sit or summon. Questers keep all their tasks.
+            // The longest configurable sit is 60 seconds; do not start one near a scheduled move.
+            bool const idle = !resident.Questing && !resident.Travelling && !resident.RetryMoveAt &&
+                (resident.Stationary || !_roaming || resident.NextMoveAt > now + 60) &&
+                !sCityLifeCustomSocial.IsConversing(resident.Bot.GuidLow);
+            candidates.push_back({resident.Bot.GuidLow, idle});
+        }
+        sCityLifeHumanBehavior.Update(candidates);
+    }
+
     void Manager::OnPlayerBeforeLogout(Player* player)
     {
         if (!player)
             return;
         uint32 guid = player->GetGUID().GetCounter();
+        sCityLifeHumanBehavior.Remove(guid);
         auto resident = std::find_if(_residents.begin(), _residents.end(),
             [guid](Resident const& candidate) { return candidate.Bot.GuidLow == guid; });
         if (resident != _residents.end() && ReleaseResident(*resident, false))
@@ -1625,6 +1650,7 @@ namespace CityLife
 
     void Manager::Shutdown()
     {
+        sCityLifeHumanBehavior.Reset();
         ReleaseAll(false);
         sCityLifeCustomBotPool.Shutdown();
     }
@@ -1640,7 +1666,10 @@ namespace CityLife
             sCityLifeCustomActivities.RecoverPending();
             MaintainCustomResidents();
             if (_enable && _startupElapsedMs >= _startupDelaySeconds * IN_MILLISECONDS)
+            {
                 UpdateSocialResidents();
+                UpdateHumanBehaviorResidents();
+            }
         }
         else
             _customTimerMs -= diff;

@@ -851,6 +851,23 @@ namespace CityLife
         PlayerbotAI* ai = GET_PLAYERBOT_AI(player);
         if (!ai || ai->HasGameClientMaster())
             return;
+        Record const* record = FindRecord(player->GetGUID().GetCounter());
+        if (_enabled && record && record->Role == CustomRole::Legendary && !record->Blocked &&
+            record->AccountVerified && record->Initialized && IsDesired(*record) &&
+            player->GetSession()->GetAccountId() == record->AccountId)
+        {
+            // A normal mount blocks Legendary admission, including its outfit and destination.
+            // Stop idle AI remounting and remove saved mount auras before the scheduler retries.
+            ai->ChangeStrategy("-mount", BOT_STATE_NON_COMBAT);
+            if (player->IsAlive() && !player->IsInFlight() && !player->IsFlying() &&
+                !player->GetTransport() && !player->GetVehicle() && !player->GetTransGUID() &&
+                !player->HasUnitMovementFlag(MOVEMENTFLAG_CAN_FLY | MOVEMENTFLAG_DISABLE_GRAVITY |
+                    MOVEMENTFLAG_ONTRANSPORT | MOVEMENTFLAG_FALLING | MOVEMENTFLAG_FALLING_FAR))
+            {
+                player->RemoveAurasByType(SPELL_AURA_MOUNTED);
+                player->Dismount();
+            }
+        }
         ai->ChangeStrategy("-stay,-follow,+passive,-grind,-rpg,-new rpg,-travel,-move random,-collision,"
             "-move from group,-quest,-loot,-gather,-duel,-pvp,-bg,-lfg,-start duel", BOT_STATE_NON_COMBAT);
         player->GetMotionMaster()->MoveIdle();

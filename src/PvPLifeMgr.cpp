@@ -474,7 +474,7 @@ namespace PvPLife
             return false;
         if (!player->IsAlive() || player->IsInCombat() || player->IsInFlight() || player->duel)
             return false;
-        if (player->InBattleground() || player->InBattlegroundQueue())
+        if (player->InBattlefield() || player->InBattleground() || player->InBattlegroundQueue())
             return false;
         if (player->GetMap() && player->GetMap()->Instanceable())
             return false;
@@ -838,7 +838,7 @@ namespace PvPLife
         {
             ReleaseLifeBot(part.Bot.GuidLow);
             Player* p = FindPlayer(part.Bot.GuidLow);
-            if (!p || !p->GetSession() || (!disabling && p->IsBeingTeleported()))
+            if (!p || !p->GetSession() || p->InBattlefield() || (!disabling && p->IsBeingTeleported()))
                 continue;
             if (disabling && p->duel)
             {
@@ -904,6 +904,8 @@ namespace PvPLife
                 continue;
             }
             Player* p = FindPlayer(step.GuidLow);
+            if (p && p->InBattlefield())
+                continue;
             if (!p || p->IsBeingTeleported())
             {
                 MoveStep retry = step;
@@ -931,6 +933,8 @@ namespace PvPLife
             Player* challenger = FindPlayer(step.ChallengerGuidLow);
             Player* target = FindPlayer(step.TargetGuidLow);
             if (!challenger || !target || challenger->IsBeingTeleported() || target->IsBeingTeleported())
+                continue;
+            if (challenger->InBattlefield() || target->InBattlefield())
                 continue;
             if (!challenger->IsAlive() || !target->IsAlive() || challenger->duel || target->duel || challenger->IsInCombat() || target->IsInCombat())
                 continue;
@@ -1105,7 +1109,8 @@ namespace PvPLife
                     continue;
 
                 Player* bot = FindPlayer(guidLow);
-                if (!bot || !bot->IsAlive() || bot->IsBeingTeleported() || bot->duel || bot->IsInCombat())
+                if (!bot || !bot->IsAlive() || bot->InBattlefield() || bot->IsBeingTeleported() ||
+                    bot->duel || bot->IsInCombat())
                     continue;
 
                 ApplyPvpStrategies(bot, true);
@@ -1190,7 +1195,7 @@ namespace PvPLife
             for (Participant const& participant : event.Members)
             {
                 Player* bot = FindPlayer(participant.Bot.GuidLow);
-                if (!bot || !bot->IsAlive() || bot->IsBeingTeleported())
+                if (!bot || !bot->IsAlive() || bot->InBattlefield() || bot->IsBeingTeleported())
                     continue;
 
                 // During a duel the combat AI owns movement. Only waiting participants are anchored.
