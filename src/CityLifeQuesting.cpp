@@ -16,6 +16,7 @@
 #include "GameTime.h"
 #include "Map.h"
 #include "NewRpgBaseAction.h"
+#include "NewRpgHelpers.h"
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
@@ -247,8 +248,8 @@ namespace
         bool IsUsableQuest(Quest const* quest, QuestStatus status)
         {
             if (!quest || (status != QUEST_STATUS_INCOMPLETE && status != QUEST_STATUS_COMPLETE) ||
-                botAI->lowPriorityQuest.contains(quest->GetQuestId()) || !IsQuestWorthDoing(quest) ||
-                !IsQuestCapableDoing(quest))
+                botAI->lowPriorityQuest.contains(quest->GetQuestId()) || !NewRpgHelpers::IsQuestWorthDoing(bot, quest) ||
+                !NewRpgHelpers::IsQuestCapableDoing(bot, quest))
                 return false;
 
             LocalQuestInfo const& info = GetLocalQuestInfo(quest);
