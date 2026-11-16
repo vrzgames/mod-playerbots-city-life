@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-11-16 - Keep residents out of NPCs
+
+- Most bundled spots are anchored exactly on an NPC or mailbox. Destinations were checked for
+  ground, navmesh, water and fisher spacing, but not for creatures, and fishing hands out the spot
+  centre first: a fisher could stand inside the Dalaran or Orgrimmar fishing trainer for hours.
+- Collect static creature spawns (trigger creatures excluded) and mailboxes around every spot on
+  each data load; reject destinations closer than `CityLife.Behaviour.NpcClearance` (default 1.5 yd,
+  `0` = off). Flight masters use `CityLife.Behaviour.FlightMasterClearance` (default 4 yd), because
+  mounted residents hid them completely. Beggar anchors cover their wander radius.
+- Random destinations get 16 instead of 6 attempts while the clearance is active; a blocked point of
+  the fixed Legendary spiral steps outwards. A spot without a free point stays empty.
+- Snap destinations onto the nearest navmesh point. `ResolveGround` accepted points up to 1 yd beside
+  the mesh, so a teleported resident could stand half a yard inside a wall.
+- Reject destinations that are indoors while the spot centre is outdoors, or the other way round.
+  The nearest navmesh point beside a house wall can be the floor inside the house.
+- Apply `data/sql/manual/world_city_life_npc_clearance.sql` to WORLD: it widens the Dalaran and
+  Orgrimmar fishing anchors to radius 4 and the default flight master spots to radius 7.
+  Rebuild and restart; add the two new keys to an existing config (the merge utility does this).
+
 ## 2026-10-25 - Human behavior update
 
 - Add independently configurable, infrequent inspect, weapon sheath and owned cosmetic-companion
