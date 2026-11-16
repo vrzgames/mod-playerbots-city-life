@@ -34,6 +34,15 @@ namespace CityLife
         Any = 2
     };
 
+    // Static creature or mailbox spawn near a spot; residents keep clear of it.
+    struct SpotBlocker
+    {
+        float X = 0.0f;
+        float Y = 0.0f;
+        float Z = 0.0f;
+        float Clearance = 0.0f;
+    };
+
     struct Spot
     {
         uint32 Id = 0;
@@ -46,6 +55,7 @@ namespace CityLife
         float O = 0.0f;
         float Radius = 3.0f;
         uint32 Weight = 100;
+        std::vector<SpotBlocker> Blockers;
     };
 
     struct Hub

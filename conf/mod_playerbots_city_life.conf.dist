@@ -134,6 +134,16 @@ CityLife.Behaviour.RelocateMaxSeconds = 600
 # Recovery uses a validated walking path, not a teleport. Combat is never interrupted.
 CityLife.Behaviour.LeashRadius = 35
 
+# Minimum distance in yards between a resident destination and any static creature spawn
+# (trigger creatures excluded) or mailbox. Most bundled spots sit exactly on an NPC; without this a
+# fisher or banker could stand inside the NPC for hours. 0 = off, maximum 5.
+CityLife.Behaviour.NpcClearance = 1.5
+
+# Clearance in yards around flight masters. Mounted residents
+# (mammoth, elekk) hid them completely at the normal clearance. The larger of this value and
+# NpcClearance applies; NpcClearance = 0 switches both off. Maximum 10.
+CityLife.Behaviour.FlightMasterClearance = 4
+
 CityLife.Behaviour.Emotes = 1
 
 CityLife.Behaviour.EmoteChancePct = 35

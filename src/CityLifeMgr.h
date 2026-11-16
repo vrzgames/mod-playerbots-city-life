@@ -69,6 +69,8 @@ namespace CityLife
         Spot const* BeggarAnchor(Resident const& resident) const;
         void WanderBeggar(Player* player, Resident& resident, Hub const& hub);
         bool AssignSpot(Resident& resident, Hub const& hub, Spot const& spot, bool allowStationary);
+        uint32 CollectNpcBlockers(std::vector<Hub>& hubs) const;
+        bool NearNpc(Spot const& spot, float x, float y, float z) const;
         bool StartMovement(Player* player, Resident& resident) const;
         void FinishMovement(Player* player, Resident& resident, bool arrived) const;
 
@@ -95,6 +97,8 @@ namespace CityLife
         uint32 _customTimerMs = 0;
         bool _fixedLegendaryIdentity = true;
         float _fishingMinimumSpacing = 2.0f;
+        float _npcClearance = 1.5f;
+        float _flightMasterClearance = 4.0f;
         bool _fishingPauseDuringBattle = true;
         bool _beggarWanderEnabled = true;
         float _beggarWanderRadius = 10.0f;

@@ -28,6 +28,7 @@
 #include "MoveSplineInit.h"
 #include "ObjectAccessor.h"
 #include "ObjectGuid.h"
+#include "ObjectMgr.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
@@ -54,6 +55,9 @@ namespace
     constexpr uint32 ReservationSeconds = 20 * MINUTE;
     constexpr uint32 ReservationRefreshSeconds = 10 * MINUTE;
     constexpr uint32 DestinationAttempts = 6;
+    // Seed spots sit on NPCs, so the NPC-clearance filter
+    // rejects the spot centre and a share of random points; give random destinations more tries.
+    constexpr uint32 NpcClearanceAttempts = 16;
     constexpr uint32 MovementRetrySeconds = 15;
     constexpr uint32 MovementStallSeconds = 30;
     constexpr uint8 MovementRetryLimit = 3;
@@ -83,7 +87,8 @@ namespace
         return offsets;
     }
 
-    bool ResolveGround(Player* player, uint32 mapId, float x, float y, float& z)
+    bool ResolveGround(Player* player, uint32 mapId, float x, float y, float& z,
+        float* meshX = nullptr, float* meshY = nullptr)
     {
         MapEntry const* entry = sMapStore.LookupEntry(mapId);
         if (!player || !entry || entry->Instanceable() || !Acore::IsValidMapCoord(x, y, z))
@@ -115,6 +120,34 @@ namespace
             std::hypot(nearest[0] - y, nearest[2] - x) > DestinationTolerance ||
             std::abs(nearest[1] - ground) > DestinationTolerance)
             return false;
+        z = ground;
+        if (meshX && meshY)
+        {
+            *meshX = nearest[2];
+            *meshY = nearest[0];
+        }
+        return true;
+    }
+
+    // ResolveGround accepts a point up to 1 yd beside the
+    // navmesh. Teleported there, a resident can stand half a yard inside a wall. Move a destination
+    // onto the nearest navmesh point (the mesh keeps ~0.5 yd from walls) and resolve it again.
+    bool ResolveGroundOnMesh(Player* player, uint32 mapId, float& x, float& y, float& z)
+    {
+        float meshX = x;
+        float meshY = y;
+        float ground = z;
+        if (!ResolveGround(player, mapId, x, y, ground, &meshX, &meshY))
+            return false;
+        if (std::hypot(meshX - x, meshY - y) > 0.01f)
+        {
+            float meshZ = ground;
+            if (!ResolveGround(player, mapId, meshX, meshY, meshZ))
+                return false;
+            x = meshX;
+            y = meshY;
+            ground = meshZ;
+        }
         z = ground;
         return true;
     }
@@ -334,6 +367,11 @@ namespace CityLife
         _fixedLegendaryIdentity = sConfigMgr->GetOption<bool>("CityLife.Custom.Legendary.FixedIdentity", true);
         _fishingMinimumSpacing = std::clamp(
             sConfigMgr->GetOption<float>("FishingLife.MinimumSpacing", 2.0f), 0.5f, 20.0f);
+        _npcClearance = sConfigMgr->GetOption<float>("CityLife.Behaviour.NpcClearance", 1.5f);
+        _npcClearance = std::isfinite(_npcClearance) ? std::clamp(_npcClearance, 0.0f, 5.0f) : 1.5f;
+        _flightMasterClearance = sConfigMgr->GetOption<float>("CityLife.Behaviour.FlightMasterClearance", 4.0f);
+        _flightMasterClearance = std::isfinite(_flightMasterClearance) ?
+            std::clamp(_flightMasterClearance, 0.0f, 10.0f) : 4.0f;
         _fishingPauseDuringBattle = sConfigMgr->GetOption<bool>("FishingLife.Wintergrasp.PauseDuringBattle", true);
         _beggarWanderEnabled = sConfigMgr->GetOption<bool>("CityLife.Custom.Beggar.Wander.Enable", true);
         _beggarWanderRadius = sConfigMgr->GetOption<float>("CityLife.Custom.Beggar.Wander.Radius", 10.0f);
@@ -474,6 +512,10 @@ namespace CityLife
                     hub->Spots.push_back(spot);
             } while (spotResult->NextRow());
         }
+
+        if (_npcClearance > 0.0f)
+            LOG_INFO("module", "[CityLife] {} NPC and mailbox spawns within {:.1f} yd clearance of city spots.",
+                CollectNpcBlockers(hubs), _npcClearance);
 
         _hubs.swap(hubs);
         uint64 requestedPopulation = 0;
@@ -784,6 +826,64 @@ namespace CityLife
         return hubs;
     }
 
+    // The seed anchors most spots exactly on an NPC
+    // (bankers, auctioneers, fishing trainers). Fishing hands out the spot centre first, so a fisher
+    // could stand inside the Dalaran fishing trainer for hours. Collect the static creature spawns around every spot
+    // once per load; AssignSpot then rejects destinations inside the clearance.
+    uint32 Manager::CollectNpcBlockers(std::vector<Hub>& hubs) const
+    {
+        uint32 blockers = 0;
+        auto addBlocker = [&](SpawnData const& data, float clearance)
+        {
+            for (Hub& hub : hubs)
+            {
+                if (hub.MapId != data.mapid)
+                    continue;
+                // Beggars wander around their anchor; their points need the whole wander area.
+                float const extra = hub.Custom == CustomRole::Beggar ? _beggarWanderRadius : 0.0f;
+                for (Spot& spot : hub.Spots)
+                {
+                    // Snapping onto the navmesh may move a destination up to DestinationTolerance outwards.
+                    float const reach = std::max(spot.Radius, extra) + DestinationTolerance + clearance;
+                    if (std::abs(data.posZ - spot.Z) > reach + GroundLayerTolerance ||
+                        std::hypot(data.posX - spot.X, data.posY - spot.Y) > reach)
+                        continue;
+                    spot.Blockers.push_back({ data.posX, data.posY, data.posZ, clearance });
+                    ++blockers;
+                }
+            }
+        };
+        // Mounted residents (mammoth, elekk) hid flight masters completely; give them more room.
+        float const flightMasterClearance = std::max(_npcClearance, _flightMasterClearance);
+        for (auto const& [spawnId, data] : sObjectMgr->GetAllCreatureData())
+        {
+            CreatureTemplate const* creature = sObjectMgr->GetCreatureTemplate(data.id);
+            if (!creature || (creature->flags_extra & CREATURE_FLAG_EXTRA_TRIGGER))
+                continue;
+            bool const flightMaster = ((creature->npcflag | data.npcflag) & UNIT_NPC_FLAG_FLIGHTMASTER) != 0;
+            addBlocker(data, flightMaster ? flightMasterClearance : _npcClearance);
+        }
+        // Every "mail" seed spot sits exactly on its mailbox as well.
+        for (auto const& [spawnId, data] : sObjectMgr->GetAllGOData())
+        {
+            GameObjectTemplate const* object = sObjectMgr->GetGameObjectTemplate(data.id);
+            if (object && object->type == GAMEOBJECT_TYPE_MAILBOX)
+                addBlocker(data, _npcClearance);
+        }
+        return blockers;
+    }
+
+    bool Manager::NearNpc(Spot const& spot, float x, float y, float z) const
+    {
+        if (_npcClearance <= 0.0f)
+            return false;
+        return std::any_of(spot.Blockers.begin(), spot.Blockers.end(), [&](SpotBlocker const& blocker)
+        {
+            return std::abs(blocker.Z - z) < GroundLayerTolerance &&
+                std::hypot(blocker.X - x, blocker.Y - y) < blocker.Clearance;
+        });
+    }
+
     bool Manager::AssignSpot(Resident& resident, Hub const& hub, Spot const& spot, bool allowStationary)
     {
         Player* player = FindPlayer(resident.Bot.GuidLow);
@@ -793,19 +893,23 @@ namespace CityLife
         bool fishing = hub.Custom == CustomRole::Fishing;
         std::vector<std::pair<float, float>> offsets = fishing ?
             FishingOffsets(spot, _fishingMinimumSpacing) : std::vector<std::pair<float, float>>{};
-        uint32 attempts = fishing ? static_cast<uint32>(offsets.size()) : DestinationAttempts;
+        bool const clearance = _npcClearance > 0.0f;
+        uint32 attempts = fishing ? static_cast<uint32>(offsets.size()) :
+            (clearance ? NpcClearanceAttempts : DestinationAttempts);
         for (uint32 attempt = 0; attempt < attempts; ++attempt)
         {
             bool fixed = hub.Custom == CustomRole::Legendary && _fixedLegendaryIdentity;
             uint32 slot = fixed ? sCityLifeCustomBotPool.GetSlot(resident.Bot.GuidLow) : 0;
             // A stable spiral keeps each named showoff at the same safe spot after restart.
+            // With NPC clearance a blocked spiral point steps outwards instead of only turning.
             float const angle = fixed ? slot * 2.39996323f + attempt * 0.2f : frand(0.0f, TwoPi);
-            float const distance = fixed ? std::min(spot.Radius, std::sqrt(static_cast<float>(slot)) * 2.5f) :
-                (attempt + 1 < DestinationAttempts ? frand(0.0f, spot.Radius) : 0.0f);
-            float const x = spot.X + (fishing ? offsets[attempt].first : std::cos(angle) * distance);
-            float const y = spot.Y + (fishing ? offsets[attempt].second : std::sin(angle) * distance);
+            float const distance = fixed ? std::min(spot.Radius, std::sqrt(static_cast<float>(slot)) * 2.5f +
+                    (clearance ? attempt * 0.5f : 0.0f)) :
+                (attempt + 1 < attempts ? frand(0.0f, spot.Radius) : 0.0f);
+            float x = spot.X + (fishing ? offsets[attempt].first : std::cos(angle) * distance);
+            float y = spot.Y + (fishing ? offsets[attempt].second : std::sin(angle) * distance);
             float z = spot.Z;
-            if (!ResolveGround(player, hub.MapId, x, y, z))
+            if (!ResolveGroundOnMesh(player, hub.MapId, x, y, z) || NearNpc(spot, x, y, z))
                 continue;
             float facing = spot.O;
             if (fishing)

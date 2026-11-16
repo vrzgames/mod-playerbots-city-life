@@ -197,6 +197,8 @@ The bundled faction-specific Wintergrasp hubs maintain their own reserved popula
 5. Apply `data/sql/manual/world_city_life_fishing.sql` to WORLD for the expanded Fishing Life
    locations. It preserves the original fishing hub identities and adds new named anchors.
    Apply `world_city_life_fishing_spacing.sql` for clearance around the original Stormwind trainer point.
+   Apply `world_city_life_npc_clearance.sql` last; it widens the few default radii (Dalaran and
+   Orgrimmar fishing anchors, flight masters) that leave no room outside the NPC clearance.
 6. Copy `conf/mod_playerbots_city_life.conf.dist` to your worldserver modules configuration area as
    `mod_playerbots_city_life.conf`. This is the only distributed module config. All old `CityLife.*`
    and `PvPLife.*` names and values are retained, except former `CityLife.Custom.Fishing.*`
