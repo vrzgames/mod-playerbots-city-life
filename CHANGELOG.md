@@ -13,6 +13,8 @@
   the fixed Legendary spiral steps outwards. A spot without a free point stays empty.
 - Snap destinations onto the nearest navmesh point. `ResolveGround` accepted points up to 1 yd beside
   the mesh, so a teleported resident could stand half a yard inside a wall.
+- Reject destinations that are indoors while the spot centre is outdoors, or the other way round.
+  The nearest navmesh point beside a house wall can be the floor inside the house.
 - Apply `data/sql/manual/world_city_life_npc_clearance.sql` to WORLD: it widens the Dalaran and
   Orgrimmar fishing anchors to radius 4 and the default flight master spots to radius 7.
   Rebuild and restart; add the two new keys to an existing config (the merge utility does this).

@@ -129,6 +129,21 @@ namespace
         return true;
     }
 
+    // Snapping onto the nearest navmesh point can pick the floor *inside* a building whose wall borders
+    // the spot (the Stormwind beggar ended up in the house behind his mailbox: targetable, invisible
+    // from the street, and without a short path back out). Destinations must be indoors/outdoors
+    // exactly like the spot centre.
+    bool IsOutdoorPoint(Player* player, uint32 mapId, float x, float y, float z, bool& outdoors)
+    {
+        Map* map = player->GetMapId() == mapId ? player->GetMap() : sMapMgr->CreateBaseMap(mapId);
+        if (!map)
+            return false;
+        PositionFullTerrainStatus status;
+        map->GetFullTerrainStatusForPosition(player->GetPhaseMask(), x, y, z, player->GetCollisionHeight(), status);
+        outdoors = status.outdoors;
+        return true;
+    }
+
     // ResolveGround accepts a point up to 1 yd beside the
     // navmesh. Teleported there, a resident can stand half a yard inside a wall. Move a destination
     // onto the nearest navmesh point (the mesh keeps ~0.5 yd from walls) and resolve it again.
@@ -894,6 +909,9 @@ namespace CityLife
         std::vector<std::pair<float, float>> offsets = fishing ?
             FishingOffsets(spot, _fishingMinimumSpacing) : std::vector<std::pair<float, float>>{};
         bool const clearance = _npcClearance > 0.0f;
+        // Keep destinations on the same side of a building wall as the spot centre.
+        bool centreOutdoors = true;
+        bool const sameSide = IsOutdoorPoint(player, hub.MapId, spot.X, spot.Y, spot.Z, centreOutdoors);
         uint32 attempts = fishing ? static_cast<uint32>(offsets.size()) :
             (clearance ? NpcClearanceAttempts : DestinationAttempts);
         for (uint32 attempt = 0; attempt < attempts; ++attempt)
@@ -910,6 +928,9 @@ namespace CityLife
             float y = spot.Y + (fishing ? offsets[attempt].second : std::sin(angle) * distance);
             float z = spot.Z;
             if (!ResolveGroundOnMesh(player, hub.MapId, x, y, z) || NearNpc(spot, x, y, z))
+                continue;
+            bool outdoors = centreOutdoors;
+            if (sameSide && IsOutdoorPoint(player, hub.MapId, x, y, z, outdoors) && outdoors != centreOutdoors)
                 continue;
             float facing = spot.O;
             if (fishing)
